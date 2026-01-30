@@ -6,9 +6,11 @@
     "packages/*"
   ],
   "scripts": {
+    "verify": "bun run typecheck && bun run lint && bun run format:check && bun run test",
     "typecheck": "bun --filter '*' typecheck",
     "build": "bun --filter '*' build",
     "lint": "bun --filter '*' lint",
+    "test": "bun --filter '*' test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "website:dev": "bun --cwd packages/nextlytics-website dev",
