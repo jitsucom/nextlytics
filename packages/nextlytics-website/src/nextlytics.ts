@@ -11,41 +11,6 @@ import { postgrestBackend } from "nextlytics/backends/postgrest";
 import { clickhouseBackend } from "nextlytics/backends/clickhouse";
 import { posthogBackend } from "nextlytics/backends/posthog";
 
-// Edge-compatible PostHog adapter using HTTP API directly
-function createPosthogHttpAdapter(apiKey: string, host: string) {
-  const endpoint = `${host.replace(/\/$/, "")}/capture/`;
-  let currentDistinctId: string | undefined;
-
-  return {
-    identify(distinctId: string, properties?: Record<string, unknown>) {
-      currentDistinctId = distinctId;
-      fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          api_key: apiKey,
-          event: "$identify",
-          distinct_id: distinctId,
-          properties: { $set: properties },
-        }),
-      }).catch(() => {});
-    },
-    capture(event: string, properties?: Record<string, unknown>) {
-      fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          api_key: apiKey,
-          event,
-          distinct_id: currentDistinctId ?? "anonymous",
-          properties,
-          timestamp: new Date().toISOString(),
-        }),
-      }).catch(() => {});
-    },
-  };
-}
-
 function buildBackends(): (NextlyticsBackend | NextlyticsBackendFactory)[] {
   const backends: (NextlyticsBackend | NextlyticsBackendFactory)[] = [demoBackend];
 
@@ -97,11 +62,10 @@ function buildBackends(): (NextlyticsBackend | NextlyticsBackendFactory)[] {
   }
 
   if (process.env.POSTHOG_API_KEY) {
-    const host = process.env.POSTHOG_HOST || "https://app.posthog.com";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     backends.push(
       posthogBackend({
-        posthog: createPosthogHttpAdapter(process.env.POSTHOG_API_KEY, host) as any,
+        apiKey: process.env.POSTHOG_API_KEY,
+        host: process.env.POSTHOG_HOST,
       })
     );
   }

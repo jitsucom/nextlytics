@@ -161,7 +161,7 @@ export type ClientAction = {
   items: ClientActionItem[];
 };
 
-export type ClientActionItem = TemplatizedScriptInsertion<any>;
+export type ClientActionItem = TemplatizedScriptInsertion<unknown>;
 
 /**
  * Inserts scripts to a page as

@@ -19,4 +19,3 @@ bun run format:check # Check formatting
 
 bun run website:dev  # Run website in dev mode
 ```
-

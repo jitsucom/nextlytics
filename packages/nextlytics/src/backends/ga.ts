@@ -216,7 +216,12 @@ export function googleAnalyticsBackend(
         const userId = event.userContext?.userId;
 
         // Extract user properties (excluding PII)
-        const { email, name, phone, ...customTraits } = event.userContext?.traits ?? {};
+        const {
+          email: _email,
+          name: _name,
+          phone: _phone,
+          ...customTraits
+        } = event.userContext?.traits ?? {};
         const userProperties = Object.keys(customTraits).length > 0 ? customTraits : undefined;
 
         // For pageView: return client-side scripts

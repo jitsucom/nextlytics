@@ -13,7 +13,7 @@ const templateFunctions: TemplateFunctions = {
   json: (v) => JSON.stringify(v ?? null),
 };
 // Cache compiled templates to avoid recompiling
-let compiledCache: Record<string, { src?: CompiledTemplate; body?: CompiledTemplate }> = {};
+const compiledCache: Record<string, { src?: CompiledTemplate; body?: CompiledTemplate }> = {};
 
 function createClientContext(): ClientContext {
   const isBrowser = typeof window !== "undefined";

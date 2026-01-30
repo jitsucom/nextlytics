@@ -48,7 +48,7 @@ export function eventToRow(event: NextlyticsEvent): Record<ColumnName, unknown> 
 
   const userTraitsRest = event.userContext?.traits
     ? (() => {
-        const { email, name, ...rest } = event.userContext!.traits;
+        const { email: _email, name: _name, ...rest } = event.userContext!.traits;
         return Object.keys(rest).length > 0 ? rest : null;
       })()
     : null;
