@@ -1,0 +1,162 @@
+{
+  "name": "nextlytics",
+  "version": "0.0.1",
+  "description": "Analytics library for Next.js",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./client": {
+      "import": {
+        "types": "./dist/client.d.ts",
+        "default": "./dist/client.js"
+      },
+      "require": {
+        "types": "./dist/client.d.ts",
+        "default": "./dist/client.cjs"
+      }
+    },
+    "./server": {
+      "import": {
+        "types": "./dist/server.d.ts",
+        "default": "./dist/server.js"
+      },
+      "require": {
+        "types": "./dist/server.d.ts",
+        "default": "./dist/server.cjs"
+      }
+    },
+    "./backends/logging": {
+      "import": {
+        "types": "./dist/backends/logging.d.ts",
+        "default": "./dist/backends/logging.js"
+      },
+      "require": {
+        "types": "./dist/backends/logging.d.ts",
+        "default": "./dist/backends/logging.cjs"
+      }
+    },
+    "./backends/posthog": {
+      "import": {
+        "types": "./dist/backends/posthog.d.ts",
+        "default": "./dist/backends/posthog.js"
+      },
+      "require": {
+        "types": "./dist/backends/posthog.d.ts",
+        "default": "./dist/backends/posthog.cjs"
+      }
+    },
+    "./backends/neon": {
+      "import": {
+        "types": "./dist/backends/neon.d.ts",
+        "default": "./dist/backends/neon.js"
+      },
+      "require": {
+        "types": "./dist/backends/neon.d.ts",
+        "default": "./dist/backends/neon.cjs"
+      }
+    },
+    "./backends/postgrest": {
+      "import": {
+        "types": "./dist/backends/postgrest.d.ts",
+        "default": "./dist/backends/postgrest.js"
+      },
+      "require": {
+        "types": "./dist/backends/postgrest.d.ts",
+        "default": "./dist/backends/postgrest.cjs"
+      }
+    },
+    "./backends/segment": {
+      "import": {
+        "types": "./dist/backends/segment.d.ts",
+        "default": "./dist/backends/segment.js"
+      },
+      "require": {
+        "types": "./dist/backends/segment.d.ts",
+        "default": "./dist/backends/segment.cjs"
+      }
+    },
+    "./backends/clickhouse": {
+      "import": {
+        "types": "./dist/backends/clickhouse.d.ts",
+        "default": "./dist/backends/clickhouse.js"
+      },
+      "require": {
+        "types": "./dist/backends/clickhouse.d.ts",
+        "default": "./dist/backends/clickhouse.cjs"
+      }
+    },
+    "./backends/gtm": {
+      "import": {
+        "types": "./dist/backends/gtm.d.ts",
+        "default": "./dist/backends/gtm.js"
+      },
+      "require": {
+        "types": "./dist/backends/gtm.d.ts",
+        "default": "./dist/backends/gtm.cjs"
+      }
+    },
+    "./backends/ga": {
+      "import": {
+        "types": "./dist/backends/ga.d.ts",
+        "default": "./dist/backends/ga.js"
+      },
+      "require": {
+        "types": "./dist/backends/ga.d.ts",
+        "default": "./dist/backends/ga.cjs"
+      }
+    },
+    "./plugins/vercel-geo": {
+      "import": {
+        "types": "./dist/plugins/vercel-geo.d.ts",
+        "default": "./dist/plugins/vercel-geo.js"
+      },
+      "require": {
+        "types": "./dist/plugins/vercel-geo.d.ts",
+        "default": "./dist/plugins/vercel-geo.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "typecheck": "bun tsc --noEmit",
+    "build": "rm -rf dist && tsup && find dist -name '*.d.cts' -delete",
+    "lint": "bun eslint src",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "bun run build"
+  },
+  "peerDependencies": {
+    "next": ">=15.0.0",
+    "@neondatabase/serverless": ">=0.10.0"
+  },
+  "peerDependenciesMeta": {
+    "@neondatabase/serverless": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@neondatabase/serverless": "^0.10.0",
+    "@types/react": "^19.0.0",
+    "eslint": "^9.0.0",
+    "next": "^15.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.0.18"
+  }
+}

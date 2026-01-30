@@ -1,0 +1,19 @@
+import type { IntegrationMeta } from "../types";
+
+export const meta: IntegrationMeta = {
+  name: "Google Tag Manager",
+  slug: "google-tag-manager",
+  description:
+    "Push events to Google Tag Manager's dataLayer from the server. " +
+    "Combine server-side data collection with client-side tag management.",
+  type: "backend",
+  tags: ["stable", "hybrid"],
+  logo: "/integrations/gtm.svg",
+  logoSvg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <path fill="#8AB4F8" d="M35.3 6L6 35.3l11.3 11.3L58 6H35.3z"/>
+  <path fill="#4285F4" d="M58 6L17.3 46.6 28.7 58 58 28.7V6z"/>
+  <path fill="#246FDB" d="M6 35.3l11.3 11.3L28.7 58 17.3 46.6 6 35.3z"/>
+  <circle fill="#246FDB" cx="17.3" cy="46.6" r="8"/>
+</svg>`,
+  officialDocs: "https://developers.google.com/tag-platform/tag-manager",
+};

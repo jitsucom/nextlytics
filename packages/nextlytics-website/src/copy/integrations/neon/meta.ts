@@ -1,0 +1,22 @@
+import type { IntegrationMeta } from "../types";
+
+export const meta: IntegrationMeta = {
+  name: "Neon",
+  slug: "neon",
+  description:
+    "Store analytics in Neon's serverless Postgres. " +
+    "Auto-scaling, branching, and instant provisioning for your analytics data.",
+  type: "backend",
+  tags: ["stable", "server-side"],
+  logo: "/integrations/neon.svg",
+  logoSvg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="neon-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00E699"/>
+      <stop offset="100%" style="stop-color:#00CC88"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#neon-grad)" d="M12 8h32c6.6 0 12 5.4 12 12v32H44c-6.6 0-12-5.4-12-12V24c0-2.2-1.8-4-4-4h-4c-2.2 0-4 1.8-4 4v16c0 6.6-5.4 12-12 12H8V20c0-6.6 5.4-12 12-12z"/>
+</svg>`,
+  officialDocs: "https://neon.tech/docs",
+};

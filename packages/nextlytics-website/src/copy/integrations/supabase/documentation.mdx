@@ -1,0 +1,143 @@
+## Configuration
+
+```typescript
+import { Nextlytics } from "nextlytics/server";
+import { postgrestBackend } from "nextlytics/backends/postgrest";
+
+export const { middleware, handlers, analytics } = Nextlytics({
+  backends: [
+    postgrestBackend({
+      // Required. Your Supabase project URL + /rest/v1
+      url: process.env.SUPABASE_URL! + "/rest/v1",
+
+      // Required. Your Supabase service role key (for server-side writes)
+      apiKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+
+      // Optional. Table name (default: "analytics")
+      tableName: "analytics",
+    }),
+  ],
+});
+```
+
+## Generic PostgREST
+
+This backend works with any PostgREST-compatible API, not just Supabase:
+
+```typescript
+postgrestBackend({
+  url: "https://your-postgrest-server.com",
+  // apiKey is optional for non-Supabase PostgREST
+});
+```
+
+## Table Schema
+
+Create the analytics table in Supabase SQL editor:
+
+```sql
+CREATE TABLE IF NOT EXISTS analytics (
+  event_id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  collected_at TIMESTAMPTZ NOT NULL,
+  anonymous_user_id TEXT,
+  user_id TEXT,
+  path TEXT,
+  host TEXT,
+  method TEXT,
+  ip TEXT,
+  referer TEXT,
+  user_agent TEXT,
+  locale TEXT,
+  properties JSONB,
+  server_context JSONB,
+  client_context JSONB,
+  user_context JSONB
+);
+
+-- Indexes for common queries
+CREATE INDEX idx_analytics_collected_at ON analytics(collected_at DESC);
+CREATE INDEX idx_analytics_type ON analytics(type);
+CREATE INDEX idx_analytics_user_id ON analytics(user_id);
+
+-- Enable Row Level Security (recommended)
+ALTER TABLE analytics ENABLE ROW LEVEL SECURITY;
+
+-- Policy for service role (server-side writes)
+CREATE POLICY "Service role can insert" ON analytics
+  FOR INSERT TO service_role WITH CHECK (true);
+
+CREATE POLICY "Service role can update" ON analytics
+  FOR UPDATE TO service_role USING (true);
+```
+
+## Event Updates
+
+The PostgREST backend supports event updates. When client context becomes available, Nextlytics
+updates the existing event via PATCH:
+
+```typescript
+// Initial insert
+POST /rest/v1/analytics
+{ event_id: "abc", path: "/products", ... }
+
+// Later update with client context
+PATCH /rest/v1/analytics?event_id=eq.abc
+{ client_context: { userAgent: "...", ... } }
+```
+
+## Querying with Supabase
+
+Use Supabase's client library to query your analytics:
+
+```typescript
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
+
+// Page views today
+const { data } = await supabase
+  .from("analytics")
+  .select("path, count")
+  .eq("type", "pageView")
+  .gte("collected_at", new Date().toISOString().split("T")[0]);
+
+// User events
+const { data: userEvents } = await supabase
+  .from("analytics")
+  .select("*")
+  .eq("user_id", "user_123")
+  .order("collected_at", { ascending: false });
+```
+
+## Real-time Subscriptions
+
+Supabase supports real-time subscriptions on your analytics table:
+
+```typescript
+const channel = supabase
+  .channel("analytics")
+  .on("postgres_changes", { event: "INSERT", schema: "public", table: "analytics" }, (payload) => {
+    console.log("New event:", payload.new);
+  })
+  .subscribe();
+```
+
+## Security
+
+Always use the **service role key** for server-side writes. Never expose it to the client.
+
+For read access, create appropriate RLS policies:
+
+```sql
+-- Allow authenticated users to read their own events
+CREATE POLICY "Users can read own events" ON analytics
+  FOR SELECT TO authenticated
+  USING (user_id = auth.uid()::text);
+```
+
+## Limitations
+
+- **Service role required**: Writes need the service role key (not the anon key)
+- **PostgREST API limits**: Large batch inserts may hit API limits
+- **No transactions**: Each event is inserted individually

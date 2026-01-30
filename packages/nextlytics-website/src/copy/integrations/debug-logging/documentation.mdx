@@ -1,0 +1,115 @@
+## Configuration
+
+```typescript
+import { Nextlytics } from "nextlytics/server";
+import { loggingBackend } from "nextlytics/backends/logging";
+
+export const { middleware, handlers, analytics } = Nextlytics({
+  backends: [loggingBackend()],
+});
+```
+
+No configuration required. Just add it to your backends array.
+
+## How It Works
+
+The logging backend prints all analytics events to the console using `console.log`. Each event
+is formatted with the event type, route, and event ID on the first line, followed by the full
+event data as formatted JSON.
+
+## Output Format
+
+```
+[Nextlytics Log] pageView GET /products (nl_abc123)
+{
+  "serverContext": {
+    "path": "/products",
+    "host": "localhost:3000",
+    "method": "GET",
+    "ip": "::1"
+  },
+  "properties": {
+    "title": "Products"
+  },
+  "collectedAt": "2024-01-15T10:30:00.000Z",
+  "anonymousUserId": "anon_xyz789"
+}
+```
+
+## Event Updates
+
+The logging backend also logs event updates:
+
+```
+[Nextlytics Log] Update nl_abc123
+{
+  "clientContext": {
+    "userAgent": "Mozilla/5.0...",
+    "referer": "https://google.com",
+    "locale": "en-US"
+  }
+}
+```
+
+## Use Cases
+
+### Development
+
+Add the logging backend during development to see exactly what data Nextlytics is collecting:
+
+```typescript
+import { Nextlytics } from "nextlytics/server";
+import { loggingBackend } from "nextlytics/backends/logging";
+import { posthogBackend } from "nextlytics/backends/posthog";
+
+export const { middleware, handlers, analytics } = Nextlytics({
+  backends: [
+    // Always log in development
+    ...(process.env.NODE_ENV === "development" ? [loggingBackend()] : []),
+    // Production backend
+    posthogBackend({ ... }),
+  ],
+});
+```
+
+### Debugging Production
+
+Temporarily add logging to debug production issues:
+
+```typescript
+backends: [
+  loggingBackend(),  // See events in your server logs
+  posthogBackend({ ... }),
+]
+```
+
+### Testing
+
+Use in tests to verify events are being tracked correctly:
+
+```typescript
+// In your test setup
+const { middleware, handlers, analytics } = Nextlytics({
+  backends: [loggingBackend()],
+});
+
+// Run your test, check console output
+```
+
+## Multiple Backends
+
+The logging backend works alongside other backends. Events are sent to all configured backends:
+
+```typescript
+backends: [
+  loggingBackend(),           // Logs to console
+  posthogBackend({ ... }),    // Sends to PostHog
+  segmentBackend({ ... }),    // Sends to Segment
+]
+```
+
+## Limitations
+
+- **Console only**: Output goes to `console.log`, not to files or external services
+- **No persistence**: Logs are ephemeral and not stored
+- **Performance**: In high-traffic production, excessive logging may impact performance

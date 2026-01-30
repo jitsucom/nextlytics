@@ -1,0 +1,209 @@
+# What is Measurement Protocol?
+
+Google Analytics 4 has two ways to receive data:
+
+1. **Client-side gtag.js** — JavaScript running in the browser
+2. **[Measurement Protocol](https://developers.google.com/analytics/devguides/collection/protocol/ga4)** — HTTP API
+   for server-to-server requests
+
+You might think Measurement Protocol lets you do everything server-side. It doesn't. Google explicitly
+designed it as a supplement to client-side tracking, not a replacement.
+
+# Page Views Must Be Client-Side
+
+Here's the catch: Google doesn't allow you to send page views purely server-side.
+
+The [official documentation](https://developers.google.com/analytics/devguides/collection/protocol/ga4)
+states that Measurement Protocol is meant for "enriching" client-side data. Page views should come from
+gtag.js. The server API handles additional events like offline conversions, CRM data, or backend
+transactions.
+
+In fact, Google explicitly states: "In order for an event to be valid, it must have a `client_id` that
+has already been used to send an event from gtag.js."
+
+This means you can't use Measurement Protocol in isolation. The client must "check in" first.
+
+# The `client_id` Problem
+
+Every GA4 event requires a `client_id` parameter. This identifier ties events to a specific browser
+session. Google uses it to:
+
+- Stitch user journeys across pages
+- Calculate session metrics
+- Power attribution models
+- Join geographic and device information
+
+When you use `gtag.js`, it generates and stores `client_id` in a first-party cookie called `_ga`. The
+format looks like this:
+
+```
+_ga=GA1.1.1234567890.1706540400
+```
+
+The `client_id` is the part after the version prefix: `1234567890.1706540400`.
+
+This is a regular HTTP cookie — **set by client-side JavaScript**, but **readable by the server** in
+subsequent requests via the `Cookie` header. GA also sets a session cookie per property (e.g.,
+`_ga_GRXL52DD7J`) tracking session state and visit count.
+
+The catch: on the **first page view**, the cookie doesn't exist yet. The gtag.js script hasn't run.
+Your server receives a request with no `_ga` cookie. Only after the page loads and JavaScript executes
+does the cookie get set. The server can read it starting from the **second request**.
+
+See [Google's cookie documentation](https://developers.google.com/analytics/devguides/collection/ga4/cookies-user-id)
+for details.
+
+# What About `user_id`?
+
+GA4 supports a separate `user_id` parameter for logged-in users. You might think: if I set `user_id`
+on both client and server, can I skip `client_id`?
+
+No. According to [Google's documentation](https://developers.google.com/analytics/devguides/collection/ga4/uid-data),
+`client_id` and `user_id` serve different purposes:
+
+- **client_id** — identifies a browser instance (required)
+- **user_id** — identifies a logged-in user across devices (optional)
+
+They're complementary, not interchangeable. A typical payload includes both:
+
+```json
+{
+  "client_id": "1234567890.1706540400",
+  "user_id": "user-abc-123",
+  "events": [{ "name": "purchase", "params": { ... } }]
+}
+```
+
+Even with `user_id`, Google still requires a valid `client_id` from a prior gtag.js event.
+
+**Recommendation:** Set `user_id` on the client as soon as it becomes known — typically right after
+login. Then include the same `user_id` in all your Measurement Protocol requests. This is crucial for
+accuracy: it lets GA4 stitch together the user's pre-login browsing (tied to `client_id`) with their
+post-login activity and any server-side events. Without consistent `user_id` across client and server,
+you'll see fragmented user journeys in your reports.
+
+**Fun fact:** Google lets you send `user_id`, but explicitly
+[prohibits sending PII](https://developers.google.com/analytics/devguides/collection/protocol/ga4/policy)
+like email addresses or names. The `user_id` itself
+[must not be PII](https://developers.google.com/analytics/devguides/collection/ga4/reference/config) —
+use an opaque identifier, not `john@example.com`. If you need to send user data for ad matching,
+Google requires you to [SHA-256 hash it first](https://developers.google.com/analytics/devguides/collection/ga4/uid-data).
+
+# Getting client_id Server-Side
+
+If you want to send events via Measurement Protocol, you need a valid `client_id`. Google suggests
+two approaches in their
+[sending events guide](https://developers.google.com/analytics/devguides/collection/protocol/ga4/sending-events):
+
+## Option 1: Read the GA Cookie
+
+Since `_ga` is a regular HTTP cookie, your server can read it from the `Cookie` header:
+
+```typescript
+function getClientIdFromCookie(cookieHeader: string): string | null {
+  const match = cookieHeader.match(/_ga=GA\d+\.\d+\.(.+)/);
+  return match ? match[1] : null;
+}
+```
+
+Problem: the cookie only exists after gtag.js has run at least once. On the first page view, there's
+no cookie — the server receives the request before any JavaScript executes. You can only read
+`client_id` server-side starting from the **second page view**.
+
+## Option 2: Generate Your Own
+
+You can create your own `client_id` and pass it to both gtag.js and Measurement Protocol. See
+[Google's configuration reference](https://developers.google.com/analytics/devguides/collection/ga4/reference/config):
+
+```typescript
+// Generate a stable client ID
+const clientId = `${randomId()}.${Math.floor(Date.now() / 1000)}`;
+
+// Pass to gtag config
+gtag("config", "G-XXXXXXXXXX", {
+  client_id: clientId,
+});
+```
+
+Then use the same ID in your server requests. This works, but you're now responsible for storing
+and managing this ID — typically in your own cookie or session.
+
+# The Measurement Protocol Request
+
+Once you have a `client_id`, sending events is straightforward. From the
+[Measurement Protocol reference](https://developers.google.com/analytics/devguides/collection/protocol/ga4/reference):
+
+```typescript
+const response = await fetch(
+  `https://www.google-analytics.com/mp/collect?measurement_id=G-XXXXXXXXXX&api_secret=YOUR_SECRET`,
+  {
+    method: "POST",
+    body: JSON.stringify({
+      client_id: "1234567890.1706540400",
+      events: [
+        {
+          name: "purchase",
+          params: {
+            transaction_id: "T12345",
+            value: 99.99,
+            currency: "USD",
+          },
+        },
+      ],
+    }),
+  }
+);
+```
+
+You need an API secret from GA4 Admin → Data Streams → Measurement Protocol API secrets. Note that
+the endpoint returns 2xx even for invalid data. Use the
+[debug endpoint](https://www.google-analytics.com/debug/mp/collect) during development.
+
+# Why Google Requires Client-Side
+
+Google never explains why page views must come from the browser. But we can speculate.
+
+## Cross-Site Tracking
+
+Google's advertising business relies on identifying users across websites. The gtag.js script can
+participate in Google's broader tracking ecosystem — reading advertising cookies, matching click IDs,
+and syncing with Google's ad network.
+
+Server-side requests only see your domain. Google loses visibility into the broader user journey.
+
+## Ad Attribution
+
+Google Ads conversion tracking matches ad clicks with website visits. Click IDs (`gclid`) come from
+URL parameters. The gtag.js script captures these, stores them in cookies, and sends them with events.
+
+Server-side, you'd need to manually parse URLs and maintain click ID storage. Most implementations
+would miss edge cases, degrading attribution quality.
+
+## Browser Signals
+
+Looking at actual gtag.js network requests, Google collects extensive browser data: screen resolution,
+user language, CPU architecture and bitness, OS platform and version, full browser version string,
+device model, and mobile flag. This comes from the browser's
+[User-Agent Client Hints API](https://developer.mozilla.org/en-US/docs/Web/API/User-Agent_Client_Hints_API).
+
+A server only sees the `User-Agent` header — which browsers are deprecating in favor of Client Hints.
+Server-side requests can't access this rich device data. While gtag.js doesn't do explicit bot
+detection, it collects signals that Google can use for filtering on their end.
+
+# What This Means
+
+Google Analytics Measurement Protocol is useful for:
+
+- Offline conversions
+- Refund tracking
+- CRM event enrichment
+- Backend transaction logging
+
+It's not designed for:
+
+- Replacing client-side tracking
+- Pure server-side analytics
+- Privacy-focused setups without browser JavaScript
+
+If you want server-side page view tracking without client JavaScript, GA4 isn't the right tool.
+You'll need an analytics platform that doesn't depend on browser cookies and client-side code.

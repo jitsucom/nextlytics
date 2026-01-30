@@ -1,0 +1,24 @@
+{
+  "name": "nextlytics-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "bun --filter '*' typecheck",
+    "build": "bun --filter '*' build",
+    "lint": "bun --filter '*' lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "website:dev": "bun --cwd packages/nextlytics-website dev",
+    "website:start": "bun --cwd packages/nextlytics-website start",
+    "website:watch": "nodemon --watch packages/nextlytics/src --watch packages/nextlytics-website/src -e ts,tsx --exec 'bun run build && bun website:start'"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "nodemon": "^3.1.11",
+    "prettier": "^3.5.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}

@@ -1,0 +1,131 @@
+## Configuration
+
+```typescript
+import { Nextlytics } from "nextlytics/server";
+import { googleTagManagerBackend } from "nextlytics/backends/gtm";
+
+export const { middleware, handlers, analytics } = Nextlytics({
+  backends: [
+    googleTagManagerBackend({
+      // Required. Your GTM Container ID.
+      // Find it: GTM -> Admin -> Container Settings
+      containerId: "GTM-XXXXXXX",
+    }),
+  ],
+});
+```
+
+## How It Works
+
+The GTM backend uses a **hybrid approach**:
+
+1. On initial page load, it injects the GTM snippet and pushes initial data to `dataLayer`
+2. On client-side navigations, it pushes virtual pageview events to `dataLayer`
+3. Custom events are pushed to `dataLayer` for your GTM tags to process
+
+This gives you the best of both worlds: server-side data collection with client-side tag management.
+
+## Event Mapping
+
+### Page Views
+
+Page views push to `dataLayer` with the `page_view` event:
+
+```javascript
+dataLayer.push({
+  event: "page_view",
+  eventId: "nl_abc123",
+  page_path: "/products",
+  page_title: "Products",
+  page_location: "https://example.com/products",
+});
+```
+
+### Custom Events
+
+Custom events are converted to snake_case and pushed to `dataLayer`:
+
+```typescript
+await api.sendEvent("formSubmission", {
+  props: { formId: "newsletter" },
+});
+```
+
+Becomes:
+
+```javascript
+dataLayer.push({
+  event: "form_submission",
+  eventId: "nl_xyz789",
+  formId: "newsletter",
+});
+```
+
+## User Identification
+
+When a user is identified, their data is pushed to `dataLayer`:
+
+```typescript
+export const { middleware, handlers, analytics } = Nextlytics({
+  callbacks: {
+    getUser: async (ctx) => {
+      const session = await getSession(ctx);
+      if (!session?.user) return undefined;
+      return {
+        userId: session.user.id,
+        traits: { plan: "pro" },
+      };
+    },
+  },
+  backends: [googleTagManagerBackend({ containerId: "GTM-XXXXXXX" })],
+});
+```
+
+Results in:
+
+```javascript
+dataLayer.push({
+  userId: "user_123",
+  userTraits: { plan: "pro" },
+});
+```
+
+## GTM Tag Setup
+
+In Google Tag Manager, create tags that fire on your dataLayer events:
+
+### GA4 Event Tag
+
+1. Create a new GA4 Event tag
+2. Set trigger to "Custom Event" with event name `page_view`
+3. Map dataLayer variables to GA4 parameters
+
+### Facebook Pixel Tag
+
+1. Create a Facebook Pixel tag
+2. Set trigger to fire on `purchase` events
+3. Use dataLayer variables for conversion value
+
+## DataLayer Variables
+
+Create these GTM variables to access Nextlytics data:
+
+| Variable Name | Type                | DataLayer Variable Name |
+| ------------- | ------------------- | ----------------------- |
+| NL Event ID   | Data Layer Variable | `eventId`               |
+| NL User ID    | Data Layer Variable | `userId`                |
+| NL Page Path  | Data Layer Variable | `page_path`             |
+
+## Debugging
+
+Use GTM's Preview mode to inspect dataLayer pushes:
+
+1. Open GTM and click "Preview"
+2. Enter your site URL
+3. Navigate your site and watch events appear in the debugger
+
+## Limitations
+
+- **Requires client JavaScript**: GTM must run in the browser
+- **No server-side tags**: All tag firing happens client-side
+- **No event updates**: Once pushed to dataLayer, events cannot be modified

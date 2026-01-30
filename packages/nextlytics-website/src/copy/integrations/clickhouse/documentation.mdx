@@ -1,0 +1,130 @@
+## Configuration
+
+```typescript
+import { Nextlytics } from "nextlytics/server";
+import { clickhouseBackend } from "nextlytics/backends/clickhouse";
+
+export const { middleware, handlers, analytics } = Nextlytics({
+  backends: [
+    clickhouseBackend({
+      // Required. ClickHouse HTTP API URL.
+      url: "https://xxx.clickhouse.cloud:8443",
+
+      // Optional. Username (default: "default")
+      username: "default",
+
+      // Required for ClickHouse Cloud. Your password.
+      password: process.env.CLICKHOUSE_PASSWORD!,
+
+      // Optional. Database name (default: "default")
+      database: "analytics",
+
+      // Optional. Table name (default: "analytics")
+      tableName: "events",
+
+      // Optional. Use async inserts for better performance (default: true)
+      asyncInsert: true,
+    }),
+  ],
+});
+```
+
+## ClickHouse Cloud
+
+For ClickHouse Cloud, use your cloud instance URL with port 8443:
+
+```typescript
+clickhouseBackend({
+  url: "https://abc123.us-east-1.aws.clickhouse.cloud:8443",
+  username: "default",
+  password: process.env.CLICKHOUSE_PASSWORD!,
+});
+```
+
+## Self-hosted ClickHouse
+
+For self-hosted instances, use port 8123 (HTTP) or 8443 (HTTPS):
+
+```typescript
+clickhouseBackend({
+  url: "http://localhost:8123",
+  username: "default",
+  password: "",
+  database: "analytics",
+});
+```
+
+## Table Schema
+
+On first use, if the table doesn't exist, Nextlytics will print the required CREATE TABLE statement.
+Run it in your ClickHouse client:
+
+```sql
+CREATE TABLE IF NOT EXISTS analytics.events (
+  event_id String,
+  type String,
+  collected_at DateTime64(3),
+  anonymous_user_id String,
+  user_id Nullable(String),
+  path String,
+  host String,
+  method String,
+  ip String,
+  referer Nullable(String),
+  user_agent Nullable(String),
+  locale Nullable(String),
+  properties String,
+  server_context String,
+  client_context Nullable(String),
+  user_context Nullable(String)
+) ENGINE = MergeTree()
+ORDER BY (collected_at, event_id);
+```
+
+## Async Inserts
+
+By default, Nextlytics uses ClickHouse's async inserts for better performance. This means:
+
+- Inserts return immediately without waiting for data to be written
+- ClickHouse batches multiple inserts together
+- Slightly higher latency before data appears in queries
+
+To disable async inserts (wait for each insert to complete):
+
+```typescript
+clickhouseBackend({
+  url: "...",
+  asyncInsert: false,
+});
+```
+
+## Querying Your Data
+
+```sql
+-- Page views by path
+SELECT path, count() as views
+FROM analytics.events
+WHERE type = 'pageView'
+GROUP BY path
+ORDER BY views DESC;
+
+-- Events by user
+SELECT user_id, type, collected_at
+FROM analytics.events
+WHERE user_id IS NOT NULL
+ORDER BY collected_at DESC;
+
+-- Parse JSON properties
+SELECT
+  JSONExtractString(properties, 'product') as product,
+  count() as purchases
+FROM analytics.events
+WHERE type = 'purchase'
+GROUP BY product;
+```
+
+## Limitations
+
+- **No event updates**: ClickHouse is optimized for append-only workloads
+- **Eventual consistency**: With async inserts, data may take a few seconds to appear
+- **No real-time**: For real-time analytics, consider a streaming solution

@@ -1,0 +1,152 @@
+## Configuration
+
+```typescript
+import { Nextlytics } from "nextlytics/server";
+import { segmentBackend } from "nextlytics/backends/segment";
+
+export const { middleware, handlers, analytics } = Nextlytics({
+  backends: [
+    segmentBackend({
+      // Required. Your Segment write key.
+      // Find it: Segment -> Sources -> Your Source -> Settings -> API Keys
+      writeKey: process.env.SEGMENT_WRITE_KEY!,
+
+      // Optional. API host (default: "https://api.segment.io")
+      host: "https://api.segment.io",
+    }),
+  ],
+});
+```
+
+## Jitsu Compatibility
+
+Segment backend also works with [Jitsu](https://jitsu.com) and other Segment-compatible endpoints:
+
+```typescript
+segmentBackend({
+  writeKey: process.env.JITSU_WRITE_KEY!,
+  host: "https://ingest.g.jitsu.com",
+});
+```
+
+## How It Works
+
+All events are sent server-side via Segment's HTTP Tracking API. This means:
+
+- 100% delivery rate (no ad blockers)
+- No client-side JavaScript required
+- Full server context available
+
+## Event Mapping
+
+### Page Views
+
+Page views are sent via `/v1/page`:
+
+```typescript
+// Nextlytics
+await api.sendEvent("pageView");
+
+// Sent to Segment
+{
+  "type": "page",
+  "messageId": "nl_abc123",
+  "anonymousId": "anon_xyz",
+  "userId": "user_123",
+  "name": "/products",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "context": { ... },
+  "properties": { ... }
+}
+```
+
+### Custom Events
+
+All other events are sent via `/v1/track`:
+
+```typescript
+await api.sendEvent("purchase", {
+  props: { value: 99.99 },
+});
+
+// Sent to Segment
+{
+  "type": "track",
+  "event": "purchase",
+  "messageId": "nl_def456",
+  "anonymousId": "anon_xyz",
+  "properties": {
+    "value": 99.99,
+    "path": "/checkout",
+    "host": "example.com"
+  }
+}
+```
+
+## Context Data
+
+Segment's context object is populated with available data:
+
+```json
+{
+  "context": {
+    "ip": "203.0.113.1",
+    "userAgent": "Mozilla/5.0...",
+    "locale": "en-US",
+    "page": {
+      "path": "/products",
+      "referrer": "https://google.com"
+    },
+    "screen": {
+      "width": 1920,
+      "height": 1080
+    },
+    "traits": {
+      "plan": "pro"
+    }
+  }
+}
+```
+
+## User Identification
+
+Users are identified via `anonymousId` and `userId`:
+
+```typescript
+export const { middleware, handlers, analytics } = Nextlytics({
+  callbacks: {
+    getUser: async (ctx) => {
+      const session = await getSession(ctx);
+      if (!session?.user) return undefined;
+      return {
+        userId: session.user.id,
+        traits: {
+          email: session.user.email,
+          plan: "pro",
+        },
+      };
+    },
+  },
+  backends: [segmentBackend({ writeKey: "..." })],
+});
+```
+
+Traits are included in the context object for downstream destinations.
+
+## Destinations
+
+Once data reaches Segment, it can be routed to 300+ destinations:
+
+- Google Analytics
+- Mixpanel
+- Amplitude
+- Data warehouses (BigQuery, Snowflake, Redshift)
+- Marketing tools (HubSpot, Mailchimp, Intercom)
+
+Configure destinations in the Segment dashboard.
+
+## Limitations
+
+- **No event updates**: Segment doesn't support updating events after they're sent
+- **No real-time debugging**: Use Segment's debugger in the dashboard
+- **Rate limits**: Segment has rate limits on the HTTP API (check their docs)

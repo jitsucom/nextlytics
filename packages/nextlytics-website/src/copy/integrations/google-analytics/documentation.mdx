@@ -1,0 +1,118 @@
+## Configuration
+
+```typescript
+import { Nextlytics } from "nextlytics/server";
+import { googleAnalyticsBackend } from "nextlytics/backends/ga";
+
+export const { middleware, handlers, analytics } = Nextlytics({
+  backends: [
+    googleAnalyticsBackend({
+      // Required. Your GA4 Measurement ID.
+      // Find it: GA4 Admin -> Data Streams -> Your Stream -> Measurement ID
+      measurementId: "G-XXXXXXXXXX",
+
+      // Required for server-side events (everything except pageView).
+      // Find it: GA4 Admin -> Data Streams -> Measurement Protocol API secrets
+      apiSecret: "your-api-secret",
+
+      // Optional. Shows events in GA4 DebugView for testing.
+      // Default: false
+      debugMode: false,
+
+      // Optional. Source for GA client_id.
+      // - "gaCookie" (default): Use _ga cookie set by gtag.js, fall back to anonymousUserId
+      // - "anonymousUserId": Always use Nextlytics anonymousUserId
+      clientIdSource: "gaCookie",
+    }),
+  ],
+});
+```
+
+## Event Mapping
+
+Google Analytics requires page views to come from the browser. It needs to run JavaScript to collect
+browser metadata and measure engagement. Because of this limitation, Nextlytics uses a **hybrid approach**:
+
+- **Page views** are sent client-side via a JavaScript snippet
+- **All other events** are sent server-side via the Measurement Protocol
+
+### Page View Events
+
+When Nextlytics tracks a `pageView`, it returns a small JavaScript snippet that fires `gtag.js`. By default,
+the snippet uses the `_ga` cookie (set by gtag.js on previous visits) as the GA `client_id`. On the first
+visit when no `_ga` cookie exists yet, it falls back to the Nextlytics `anonymousUserId`.
+
+The snippet maps to GA4's `page_view` event.
+
+### Other Events
+
+All other events (purchases, form submissions, custom events) are sent server-side via the
+[Measurement Protocol](https://developers.google.com/analytics/devguides/collection/protocol/ga4).
+This means 100% delivery rate - no ad blockers can interfere.
+
+```typescript
+const { analytics } = await import("./nextlytics");
+const api = await analytics();
+
+await api.sendEvent("purchase", {
+  props: {
+    value: 99.99,
+    currency: "USD",
+  },
+});
+```
+
+Event names are converted from camelCase to snake_case:
+
+- `formSubmission` -> `form_submission`
+- `apiCall` -> `api_call`
+- `userSignup` -> `user_signup`
+
+## User Identification
+
+User identification is configured via the `callbacks.getUser` option in your Nextlytics config. When a user
+is identified, Nextlytics sends only `user_id` to GA4. For privacy, email, name, and phone are not sent.
+Custom traits are sent as user properties.
+
+```typescript
+export const { middleware, handlers, analytics } = Nextlytics({
+  callbacks: {
+    getUser: async (ctx) => {
+      const session = await getSession(ctx);
+      if (!session?.user) return undefined;
+      return {
+        userId: session.user.id,
+        traits: {
+          plan: "pro",      // Sent as GA4 user property
+          company: "Acme",  // Sent as GA4 user property
+          email: "...",     // NOT sent to GA
+          name: "...",      // NOT sent to GA
+        },
+      };
+    },
+  },
+  backends: [googleAnalyticsBackend({ ... })],
+});
+```
+
+## Limitations
+
+- **First visit uses fallback client_id.** On the very first page view, the `_ga` cookie doesn't exist yet
+  (gtag.js hasn't run). Nextlytics falls back to `anonymousUserId` for that request. Subsequent requests use
+  the real `_ga` cookie.
+- **Page views require JavaScript.** This is a GA limitation, not Nextlytics.
+- **Real-time reports may be delayed.** Server-side events can take a few minutes to appear in GA4.
+
+## Debugging
+
+Enable `debugMode` to see events in GA4's DebugView:
+
+```typescript
+googleAnalyticsBackend({
+  measurementId: "G-XXXXXXXXXX",
+  apiSecret: "xxx",
+  debugMode: true,
+});
+```
+
+Then open GA4 -> Admin -> DebugView to see incoming events.

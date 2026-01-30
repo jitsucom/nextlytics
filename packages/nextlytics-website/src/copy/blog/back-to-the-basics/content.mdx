@@ -1,0 +1,120 @@
+# The Golden Age of Log Files
+
+In the early days of the web, analytics was simple. Every time someone visited your page, your web
+server wrote a line to `access.log`. That was it. No JavaScript. No third-party services. Just a
+text file on your server.
+
+Throughout the 1990s and early 2000s, tools like [AWStats](https://awstats.sourceforge.io/), were the standard.
+They parsed your Apache or Nginx logs and generated static HTML reports.
+
+```
+192.168.1.1 - - [29/Jan/2025:10:15:23 +0000] "GET /products HTTP/1.1" 200 4523
+192.168.1.2 - - [29/Jan/2025:10:15:24 +0000] "GET /about HTTP/1.1" 200 2341
+```
+
+These tools gave you everything you needed: page views, unique visitors, referrers, and user agents.
+All computed from data you already had.
+
+Then things got complicated.
+
+# The Curse of Pixels
+
+As websites grew to multiple servers and CDNs, centralized logging became harder. The solution?
+JavaScript tracking pixels.
+
+It started innocently with a 1x1 transparent GIF. The browser requested this tiny image from an
+analytics server, passing page information as URL parameters. Hence the name "pixel."
+
+But pixels quickly evolved into complex JavaScript. Today, Google Analytics' `gtag.js` weighs around
+**75 KB** — and it downloads another script adding **~100 KB** more. That's 175 KB just to count
+page views.
+
+And Google Analytics is rarely alone.
+
+## The Script Parade
+
+Major news sites load dozens of tracking scripts. Testing on media websites shows on a single article page. Each tracker:
+
+- Adds network requests
+- Blocks rendering
+- Competes for CPU
+- Can load even more scripts
+
+## The Cookie Banner Curse
+
+Then came GDPR in 2018 and CCPA in 2020.
+
+These regulations require informed consent before setting tracking cookies. The result? Cookie
+banners everywhere.
+
+Now visitors face a wall of legal text before seeing your content. They click through (or bounce)
+just to dismiss the modal. The user experience degrades further.
+
+And what do these banners protect against? The very tracking pixels we added in the first place.
+
+We created a problem, then created another problem to "solve" it.
+
+## This is Madness
+
+Here's what tracking and ads look like on major news websites:
+
+<TrackingComparison metric="size" />
+
+By download size, most sites look reasonable. Content dominates. But look at the network requests:
+
+<TrackingComparison metric="requests" />
+
+NY Post makes **42% of its requests** just for tracking. Nearly half the network activity exists to
+watch you read the news.
+
+Let's summarize what modern analytics requires:
+
+1. **Multiple JavaScript files** (100+ KB compressed)
+2. **Dozens of network requests** to third-party domains
+3. **Cookie consent mechanisms** with legal complexity
+4. **Blocked by ad blockers** — losing 20-40% of data
+5. **Slower page loads** affecting Core Web Vitals
+6. **Privacy concerns** for your users
+
+All to count page views. Something a 30-year-old Perl script did from a log file.
+
+## Back to the Server
+
+With modern full-stack frameworks like Next.js, every page request already hits your server. The
+middleware runs. You have the request data. Why send it to JavaScript?
+
+This is the idea behind Nextlytics.
+
+<ServerFlowDiagram />
+
+**Everything happens server-side:**
+
+- Page views recorded in middleware
+- No client JavaScript for basic tracking
+- No cookies needed for anonymous analytics
+- No GDPR banners required
+- No ad blocker interference
+- Zero impact on page load
+
+Your server already knows who visited what page. Nextlytics captures that and sends it to your
+analytics backend — PostHog, Segment, your own database, whatever you prefer.
+
+## What About Client-Side Events?
+
+Some analytics genuinely require JavaScript. Google Ads conversion tracking. Facebook Pixel. These
+need to run in the browser for attribution.
+
+Nextlytics handles this too. Configure which backends need client-side code, and only those scripts
+get loaded. Not a pile of trackers — just what you actually need.
+
+## The Way Forward
+
+Web analytics went from simple to absurdly complex. Thirty years of accumulated hacks and
+workarounds.
+
+With server-side frameworks now standard, we can return to the basics. Your server knows when users
+visit pages. Let it do the tracking.
+
+No pixels. No banners. Just accurate data.
+
+[Get started with Nextlytics →](/#how-it-works)
