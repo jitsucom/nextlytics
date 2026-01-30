@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="packages/nextlytics-website/logos/logo.svg" alt="Nextlytics" width="80" />
+  <img src="logo.svg" alt="Nextlytics" width="80" />
 </p>
 
 <h1 align="center">Nextlytics</h1>
