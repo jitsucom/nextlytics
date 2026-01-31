@@ -35,7 +35,7 @@ a database like ClickHouse or Postgres.
 ## Install
 
 ```bash
-npm install nextlytics
+npm install @nextlytics/core
 ```
 
 ## Quick Start
@@ -43,8 +43,8 @@ npm install nextlytics
 **1. Configure your backend** (`src/nextlytics.ts`)
 
 ```typescript
-import { Nextlytics } from "nextlytics";
-import { segmentBackend } from "nextlytics/backends/segment";
+import { Nextlytics } from "@nextlytics/core";
+import { segmentBackend } from "@nextlytics/core/backends/segment";
 
 export const { middleware, handlers, analytics } = Nextlytics({
   backends: [
@@ -58,7 +58,7 @@ export const { middleware, handlers, analytics } = Nextlytics({
 **2. Add to layout** (`src/app/layout.tsx`)
 
 ```tsx
-import { NextlyticsServer } from "nextlytics/server";
+import { NextlyticsServer } from "@nextlytics/core/server";
 
 export default function RootLayout({ children }) {
   return (

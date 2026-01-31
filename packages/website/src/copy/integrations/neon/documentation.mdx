@@ -1,0 +1,122 @@
+## Configuration
+
+```typescript
+import { Nextlytics } from "@nextlytics/core/server";
+import { neonBackend } from "@nextlytics/core/backends/neon";
+
+export const { middleware, handlers, analytics } = Nextlytics({
+  backends: [
+    neonBackend({
+      // Required. Your Neon database URL.
+      // Find it: Neon Console -> Connection Details
+      databaseUrl: process.env.DATABASE_URL!,
+
+      // Optional. Table name (default: "analytics")
+      tableName: "analytics",
+    }),
+  ],
+});
+```
+
+## How It Works
+
+The Neon backend uses `@neondatabase/serverless` to insert events directly into your Neon Postgres
+database. It's optimized for serverless environments with connection pooling.
+
+## Table Schema
+
+On first use, if the table doesn't exist, Nextlytics will print the required CREATE TABLE statement.
+Run it in your Neon SQL editor:
+
+```sql
+CREATE TABLE IF NOT EXISTS analytics (
+  event_id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  collected_at TIMESTAMPTZ NOT NULL,
+  anonymous_user_id TEXT,
+  user_id TEXT,
+  path TEXT,
+  host TEXT,
+  method TEXT,
+  ip TEXT,
+  referer TEXT,
+  user_agent TEXT,
+  locale TEXT,
+  properties JSONB,
+  server_context JSONB,
+  client_context JSONB,
+  user_context JSONB
+);
+
+CREATE INDEX idx_analytics_collected_at ON analytics(collected_at DESC);
+CREATE INDEX idx_analytics_type ON analytics(type);
+CREATE INDEX idx_analytics_user_id ON analytics(user_id);
+```
+
+## Event Updates
+
+Neon backend supports event updates. When client context becomes available (after the initial
+server-side event), Nextlytics can update the event with additional data:
+
+```typescript
+// Initial event (server-side)
+{ event_id: "abc", path: "/products", client_context: null }
+
+// After client context update
+{ event_id: "abc", path: "/products", client_context: { userAgent: "...", ... } }
+```
+
+## Querying Your Data
+
+```sql
+-- Page views by path
+SELECT path, COUNT(*) as views
+FROM analytics
+WHERE type = 'pageView'
+GROUP BY path
+ORDER BY views DESC;
+
+-- Events with properties
+SELECT
+  type,
+  properties->>'product' as product,
+  properties->>'value' as value
+FROM analytics
+WHERE type = 'purchase';
+
+-- User journey
+SELECT type, path, collected_at
+FROM analytics
+WHERE user_id = 'user_123'
+ORDER BY collected_at;
+```
+
+## Branching
+
+Neon's branching feature works great for analytics:
+
+- Create a branch to test schema changes
+- Branch production data for local development
+- Instant point-in-time recovery
+
+```bash
+# Create a branch from production
+neon branch create --name analytics-dev --parent main
+```
+
+## Connection Pooling
+
+For high-traffic sites, use Neon's connection pooling:
+
+```typescript
+neonBackend({
+  // Use the pooled connection string
+  databaseUrl: process.env.DATABASE_URL_POOLED!,
+});
+```
+
+## Limitations
+
+- **Requires @neondatabase/serverless**: Install with `npm install @neondatabase/serverless`
+- **Postgres only**: This backend is specific to Neon's serverless Postgres
+- **Cold starts**: First request may have slightly higher latency due to connection setup

@@ -2,4 +2,4 @@
 
 Read `DEVELOPMENT.md` for development commands and setup.
 
-Before commiting code run `bun run verify`
+Before commiting code run lint, typecheck and format check commands

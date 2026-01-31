@@ -1,0 +1,243 @@
+/** Server-side request context collected in middleware */
+export interface ServerEventContext {
+  /** When the event was collected on server */
+  collectedAt: Date;
+  /** Request host (e.g. "example.com") */
+  host: string;
+  /** HTTP method (GET, POST, etc.) */
+  method: string;
+  /** URL pathname (e.g. "/products/123") */
+  path: string;
+  /** Query parameters as key -> values[] */
+  search: Record<string, string[]>;
+  /** Client IP from x-forwarded-for or direct connection */
+  ip: string;
+  /** Request headers (sensitive ones removed) */
+  requestHeaders: Record<string, string>;
+  /** Response headers */
+  responseHeaders: Record<string, string>;
+}
+
+/** Client-side context collected in browser */
+export interface ClientContext {
+  /** When the event was collected on client */
+  collectedAt: Date;
+  /** document.referrer */
+  referer?: string;
+  /** window.location.pathname - may differ from server path in SPAs */
+  path?: string;
+  /** Screen and viewport dimensions */
+  screen: {
+    /** screen.width */
+    width?: number;
+    /** screen.height */
+    height?: number;
+    /** window.innerWidth (viewport) */
+    innerWidth?: number;
+    /** window.innerHeight (viewport) */
+    innerHeight?: number;
+    /** window.devicePixelRatio */
+    density?: number;
+  };
+  /** navigator.userAgent */
+  userAgent?: string;
+  /** navigator.language */
+  locale?: string;
+}
+
+/** Identified user context */
+export interface UserContext {
+  /** Unique user identifier */
+  userId: string;
+  /** User traits for identification */
+  traits: {
+    email?: string;
+    name?: string;
+    phone?: string;
+  } & Record<string, unknown>;
+}
+
+/** Analytics event sent to backends */
+export interface NextlyticsEvent {
+  /** ISO timestamp when event was collected */
+  collectedAt: string;
+  /** Unique event ID */
+  eventId: string;
+  /** Parent event ID (e.g. pageView for client events) */
+  parentEventId?: string;
+  /** Event type (e.g. "pageView", "apiCall", custom events) */
+  type: "pageView" | "apiCall" | string;
+  /** Anonymous user identifier (GDPR-compliant hash or cookie-based) */
+  anonymousUserId?: string;
+  /** Server-side request context */
+  serverContext: ServerEventContext;
+  /** Identified user context */
+  userContext?: UserContext;
+  /** Client-side browser context */
+  clientContext?: ClientContext;
+  /** Custom event properties */
+  properties: Record<string, unknown>;
+}
+
+import type { NextMiddleware, NextRequest } from "next/server";
+
+export type AnonymousUserResult = {
+  /** Anonymous user identifier */
+  anonId: string;
+};
+
+/** Minimal cookie interface compatible with both middleware and route handlers */
+export interface CookieStore {
+  get(name: string): { name: string; value: string } | undefined;
+}
+
+/** Minimal headers interface */
+export interface HeadersLike {
+  get(name: string): string | null;
+  forEach(callback: (value: string, key: string) => void): void;
+}
+
+/** Headers and cookies context for backend/plugin factories */
+export type RequestContext = {
+  headers: HeadersLike;
+  cookies: CookieStore;
+};
+
+export type NextlyticsPlugin = {
+  /**
+   * Called right after event is created but before it's sent to backends.
+   * Plugin can mutate the event to add/modify properties.
+   * @param event - The event to process (can be mutated)
+   */
+  onDispatch(event: NextlyticsEvent): Promise<void>;
+};
+
+/** Factory to create plugin per-request (for request-scoped plugins) */
+export type NextlyticsPluginFactory = (ctx: RequestContext) => NextlyticsPlugin;
+
+export type NextlyticsConfig = {
+  /** Enable debug logging (shows backend stats for each event) */
+  debug?: boolean;
+  anonymousUsers?: {
+    /** Store anonymous ID in cookies */
+    useCookies?: boolean;
+    /** Use hash-based IDs for GDPR compliance (default: true) */
+    gdprMode?: boolean;
+    /** Rotate hash salt daily for shorter-lived IDs (default: true) */
+    dailySalt?: boolean;
+    /** Cookie name when useCookies=true (default: "__nextlytics_anon") */
+    cookieName?: string;
+    /** Cookie max age in seconds (default: 2 years) */
+    cookieMaxAge?: number;
+  };
+  /**
+   * When to record pageView:
+   * - "server": in middleware (default, more reliable)
+   * - "client-init": when JS loads (has client context) - NOT SUPPORTED CURRENTLU
+   */
+  pageViewMode?: "server" | "client-init";
+  /** Skip tracking for API routes */
+  excludeApiCalls?: boolean;
+  /** Skip tracking for specific paths */
+  excludePaths?: (path: string) => boolean;
+  /** Determine if path is API route. Default: () => false */
+  isApiPath?: (path: string) => boolean;
+  /** Endpoint for client events. Default: "/api/event" */
+  eventEndpoint?: string;
+  callbacks: {
+    /** Resolve authenticated user from request context */
+    getUser?: (ctx: RequestContext) => Promise<UserContext>;
+    /** Override anonymous user ID generation */
+    getAnonymousUserId?: (opts: {
+      request: NextRequest;
+      originalAnonymousUserId?: string;
+    }) => Promise<AnonymousUserResult>;
+  };
+  /** Analytics backends to send events to */
+  backends?: (NextlyticsBackend | NextlyticsBackendFactory)[];
+
+  plugins?: (NextlyticsPlugin | NextlyticsPluginFactory)[];
+};
+
+export type ClientAction = {
+  items: ClientActionItem[];
+};
+
+export type ClientActionItem = TemplatizedScriptInsertion<unknown>;
+
+/**
+ * Inserts scripts to a page as
+ * `<script scr={src}></script>` or <script>{body}</script>
+ */
+export type TemplatizedScriptInsertion<T> = {
+  type: "script-template";
+  params: T;
+  templateId: string;
+};
+
+/** Result of dispatching an event (two-phase) */
+export type DispatchResult = {
+  /** Resolves quickly with actions from backends with returnsClientActions=true */
+  clientActions: Promise<ClientAction>;
+  /** Resolves when ALL backends complete processing */
+  completion: Promise<void>;
+};
+
+export type JavascriptTemplate = {
+  items: ScriptElement[];
+};
+
+export type ScriptElement = {
+  async?: string;
+  body?: string;
+  src?: string;
+  /** If true, skip insertion if script with same src already exists */
+  singleton?: boolean;
+};
+
+/** Backend that receives analytics events */
+export type NextlyticsBackend = {
+  /** Backend name for logging */
+  name: string;
+  /** Whether backend supports updating existing events */
+  supportsUpdates?: boolean;
+  /**
+   * If onEvent can return client actions
+   */
+  returnsClientActions?: boolean;
+
+  getClientSideTemplates?: () => Record<string, JavascriptTemplate>;
+
+  /** Handle new event */
+  onEvent(event: NextlyticsEvent): Promise<void | ClientAction>;
+  /** Update existing event (e.g. add client context to server pageView) */
+  updateEvent(eventId: string, patch: Partial<NextlyticsEvent>): Promise<void> | void;
+};
+
+/** Factory to create backend per-request (for request-scoped backends) */
+export type NextlyticsBackendFactory = (ctx: RequestContext) => NextlyticsBackend;
+
+/** Server-side analytics API */
+export type NextlyticsServerSide = {
+  /** Send custom event from server component/action */
+  sendEvent: (
+    eventName: string,
+    opts?: { props?: Record<string, unknown> }
+  ) => Promise<{ ok: boolean }>;
+};
+
+type AppRouteHandlers = Record<"GET" | "POST", (req: NextRequest) => Promise<Response>>;
+
+/** Return value from Nextlytics() */
+export type NextlyticsResult = {
+  /** Route handlers for /api/event */
+  handlers: AppRouteHandlers;
+  /** Get server-side analytics API */
+  analytics: () => Promise<NextlyticsServerSide>;
+  /** Middleware to intercept requests */
+  middleware: NextMiddleware;
+  /** Manually dispatch event (returns two-phase result) */
+  dispatchEvent: (event: NextlyticsEvent) => DispatchResult;
+  /** Manually update existing event */
+  updateEvent: (eventId: string, patch: Partial<NextlyticsEvent>) => Promise<void>;
+};

@@ -1,0 +1,181 @@
+## Configuration
+
+```typescript
+import { Nextlytics } from "@nextlytics/core/server";
+import { clickhouseBackend } from "@nextlytics/core/backends/clickhouse";
+
+export const { middleware, handlers, analytics } = Nextlytics({
+  backends: [
+    clickhouseBackend({
+      // Required. ClickHouse HTTP API URL.
+      url: "https://xxx.clickhouse.cloud:8443",
+
+      // Optional. Username (default: "default")
+      username: "default",
+
+      // Required for ClickHouse Cloud. Your password.
+      password: process.env.CLICKHOUSE_PASSWORD!,
+
+      // Optional. Database name (default: "default")
+      database: "analytics",
+
+      // Optional. Table name (default: "analytics")
+      tableName: "events",
+
+      // Optional. Use async inserts for better performance (default: true)
+      asyncInsert: true,
+
+      // Optional. Enable event updates via select+insert (default: false)
+      acceptUpdates: true,
+    }),
+  ],
+});
+```
+
+## ClickHouse Cloud
+
+For ClickHouse Cloud, use your cloud instance URL with port 8443:
+
+```typescript
+clickhouseBackend({
+  url: "https://abc123.us-east-1.aws.clickhouse.cloud:8443",
+  username: "default",
+  password: process.env.CLICKHOUSE_PASSWORD!,
+});
+```
+
+## Async Inserts
+
+By default, Nextlytics uses async inserts (`asyncInsert: true`). This is fire-and-forget:
+
+- Inserts return immediately without confirmation
+- ClickHouse batches inserts for better throughput
+- **If an insert fails, Nextlytics won't know** - errors only appear in ClickHouse server logs
+- Data can be silently lost on insert errors
+
+For critical data where you need insert confirmation:
+
+```typescript
+clickhouseBackend({
+  url: "...",
+  asyncInsert: false, // Wait for each insert to complete
+});
+```
+
+This is slower but guarantees you'll see errors.
+
+## Table Schema
+
+On first use, if the table doesn't exist, Nextlytics prints the required SQL. The schema uses:
+
+- **ReplacingMergeTree** - enables deduplication for updates
+- **PARTITION BY month** - optimal partition size for analytics
+- **ORDER BY event_id** - enables efficient updates via insert
+
+```sql
+CREATE TABLE IF NOT EXISTS default.analytics (event_id String, timestamp DateTime64(3))
+ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(timestamp) ORDER BY event_id;
+
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS parent_event_id Nullable(String);
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS type LowCardinality(String);
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS anonymous_user_id Nullable(String);
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS user_id Nullable(String);
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS user_email Nullable(String);
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS user_name Nullable(String);
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS host LowCardinality(String);
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS method LowCardinality(String);
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS path String;
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS ip Nullable(IPv6);
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS referer Nullable(String);
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS user_agent Nullable(String);
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS locale LowCardinality(Nullable(String));
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS server_context JSON;
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS client_context JSON;
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS user_traits JSON;
+ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS properties JSON;
+```
+
+## Event Updates
+
+When `acceptUpdates: true`, Nextlytics can update existing events (e.g., adding client context
+after initial page view).
+
+**How it works:**
+
+1. SELECT existing row by event_id (with timestamp lookback window)
+2. Merge with new data
+3. INSERT merged row
+4. ReplacingMergeTree deduplicates by event_id (keeps latest)
+
+The SELECT query includes a timestamp filter (`timestamp > now() - INTERVAL 60 MINUTE`) to leverage
+monthly partitioning and avoid scanning old data. Configure via `updateLookbackMinutes`:
+
+```typescript
+clickhouseBackend({
+  url: "...",
+  acceptUpdates: true,
+  updateLookbackMinutes: 60, // default: 60
+});
+```
+
+**Trade-offs to consider:**
+
+- **All queries must use FINAL** - without it, you'll see duplicate rows. FINAL is 2-10x slower
+  depending on data size and merge state.
+- **Updates only work within lookback window** - events older than `updateLookbackMinutes` won't
+  be found for updates. This is intentional for performance.
+- **Updates are eventually consistent** - ReplacingMergeTree merges happen in background, not
+  immediately.
+
+**Recommendation:** If you only need basic analytics without client context updates, keep
+`acceptUpdates: false` (the default). You'll get better query performance and simpler data.
+
+**Querying with FINAL:**
+
+```sql
+SELECT * FROM analytics FINAL WHERE type = 'pageView';
+```
+
+Alternative using `argMax()` (can be faster for specific columns):
+
+```sql
+SELECT
+  event_id,
+  argMax(user_agent, timestamp) as user_agent,
+  argMax(client_context, timestamp) as client_context
+FROM analytics
+GROUP BY event_id;
+```
+
+## Querying Your Data
+
+```sql
+-- Page views by path (use FINAL if acceptUpdates is enabled)
+SELECT path, count() as views
+FROM analytics FINAL
+WHERE type = 'pageView'
+GROUP BY path
+ORDER BY views DESC;
+
+-- Events by user
+SELECT user_id, type, timestamp
+FROM analytics FINAL
+WHERE user_id IS NOT NULL
+ORDER BY timestamp DESC;
+
+-- Query JSON properties
+SELECT
+  properties.product as product,
+  count() as purchases
+FROM analytics FINAL
+WHERE type = 'purchase'
+GROUP BY product;
+```
+
+## Limitations
+
+- **Fire-and-forget inserts**: With async inserts (default), failed inserts are silent. Check
+  ClickHouse logs for errors.
+- **No real-time**: Data may take a few seconds to appear in queries
+- **FINAL overhead**: If using updates, all queries need FINAL which adds latency
+- **Update time window**: Events older than `updateLookbackMinutes` (default 60) cannot be updated

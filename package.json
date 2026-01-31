@@ -13,9 +13,9 @@
     "test": "bun --filter '*' test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "website:dev": "bun --cwd packages/nextlytics-website dev",
-    "website:start": "bun --cwd packages/nextlytics-website start",
-    "website:watch": "nodemon --watch packages/nextlytics/src --watch packages/nextlytics-website/src -e ts,tsx --exec 'bun run build && bun website:start'"
+    "website:dev": "bun --cwd packages/website dev",
+    "website:start": "bun --cwd packages/website start",
+    "website:watch": "nodemon --watch packages/core/src --watch packages/website/src -e ts,tsx --exec 'bun run build && bun website:start'"
   },
   "devDependencies": {
     "eslint": "^9.0.0",

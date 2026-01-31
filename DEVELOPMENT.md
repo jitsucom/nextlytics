@@ -3,13 +3,12 @@
 ## Tooling
 
 - **Bun** — package manager and script runner. Use `bun install`, `bun run <script>`
-- **tsup** — bundling the `nextlytics` package
+- **tsup** — bundling the `@nextlytics/core` package
 - **Vitest** — testing
 
 ## Commands
 
 ```bash
-bun run verify       # Run all checks (typecheck, lint, format, test)
 bun run typecheck    # Type check all packages
 bun run build        # Build all packages
 bun run lint         # Lint all packages

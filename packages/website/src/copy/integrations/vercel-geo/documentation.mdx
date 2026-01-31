@@ -1,0 +1,140 @@
+# Vercel Geo Plugin
+
+Enrich your analytics events with geographic data from Vercel's edge network.
+
+## Overview
+
+When your Next.js app runs on Vercel, every request includes geographic headers. The Vercel Geo plugin
+extracts this data and adds it to your analytics events automatically.
+
+No external API calls. No additional latency. Just free geo data from Vercel's edge.
+
+## What Data You Get
+
+Vercel provides the following headers on every request:
+
+| Header                       | Property    | Example               |
+| ---------------------------- | ----------- | --------------------- |
+| `x-vercel-ip-country`        | `country`   | `US`                  |
+| `x-vercel-ip-country-region` | `region`    | `CA`                  |
+| `x-vercel-ip-city`           | `city`      | `San Francisco`       |
+| `x-vercel-ip-latitude`       | `latitude`  | `37.7749`             |
+| `x-vercel-ip-longitude`      | `longitude` | `-122.4194`           |
+| `x-vercel-ip-timezone`       | `timezone`  | `America/Los_Angeles` |
+
+## Installation
+
+```bash
+npm install @nextlytics/core
+```
+
+## Configuration
+
+```typescript
+// src/nextlytics.ts
+import { Nextlytics } from "@nextlytics/core/server";
+import { vercelGeoPlugin } from "@nextlytics/core/plugins/vercel-geo";
+import { posthogBackend } from "@nextlytics/core/backends/posthog";
+
+export const { middleware, handlers, analytics } = Nextlytics({
+  plugins: [vercelGeoPlugin()],
+  backends: [
+    posthogBackend({
+      /* ... */
+    }),
+  ],
+});
+```
+
+## Options
+
+| Option            | Type     | Default | Description                           |
+| ----------------- | -------- | ------- | ------------------------------------- |
+| `geoPropertyName` | `string` | `"geo"` | Property name to store geo data under |
+
+### Custom Property Name
+
+```typescript
+vercelGeoPlugin({
+  geoPropertyName: "location", // Events will have `location.country`, etc.
+});
+```
+
+## Event Output
+
+Every analytics event will include a `geo` object (or your custom property name):
+
+```json
+{
+  "type": "pageView",
+  "properties": {
+    "geo": {
+      "country": "US",
+      "region": "CA",
+      "city": "San Francisco",
+      "latitude": 37.7749,
+      "longitude": -122.4194,
+      "timezone": "America/Los_Angeles"
+    }
+  }
+}
+```
+
+## Use Cases
+
+### Geographic Analytics
+
+See where your users are coming from. Filter by country, region, or city in your analytics backend.
+
+### Personalization
+
+Use geo data to personalize content:
+
+```typescript
+// In a server component
+const event = await analytics.getLastEvent();
+const country = event?.properties?.geo?.country;
+
+if (country === "DE") {
+  // Show German pricing
+}
+```
+
+### Compliance
+
+Know which users are in GDPR regions (EU countries) or CCPA regions (California).
+
+## Requirements
+
+- **Vercel deployment**: This plugin only works when deployed to Vercel
+- **Edge/Serverless functions**: Headers are available in middleware and API routes
+- **No local development data**: Geo headers are not present in `next dev`
+
+## Local Development
+
+During local development (`next dev`), Vercel geo headers are not present. The plugin gracefully
+handles this by simply not adding geo data to events.
+
+To test geo functionality locally, you can mock the headers:
+
+```typescript
+// middleware.ts (development only)
+import { NextResponse } from "next/server";
+
+export function middleware(request) {
+  if (process.env.NODE_ENV === "development") {
+    request.headers.set("x-vercel-ip-country", "US");
+    request.headers.set("x-vercel-ip-city", "San Francisco");
+    // ... etc
+  }
+  return NextResponse.next();
+}
+```
+
+## Privacy Considerations
+
+Geo data is derived from IP addresses at Vercel's edge. The actual IP address is not stored by
+Nextlytics unless you explicitly configure it.
+
+City-level location data may be considered personal data under GDPR. Consult your legal team
+if you're unsure about compliance requirements.
