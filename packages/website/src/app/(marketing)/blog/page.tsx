@@ -20,10 +20,13 @@ export default function BlogPage() {
         extras={
           <Link
             href="/blog/feed.xml"
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground
+              border border-border rounded-lg hover:border-violet-300 hover:text-violet-600
+              hover:shadow-[0_0_10px_rgba(124,58,237,0.1)] transition-all"
             title="RSS Feed"
           >
-            <Rss className="w-5 h-5" />
+            <Rss className="w-4 h-4" />
+            <span>RSS</span>
           </Link>
         }
         description={

@@ -84,8 +84,8 @@ That's it. Every page view is now tracked server-side.
 ## Supported Backends
 
 | Backend                                                                 | Type              |
-| ----------------------------------------------------------------------- | ----------------- |
-| [Segment](https://nextlytics.sh/integrations/segment) / Jitsu           | CDP               |
+|-------------------------------------------------------------------------| ----------------- |
+| [Segment or Jitsu](https://nextlytics.sh/integrations/segment)               | CDP               |
 | [PostHog](https://nextlytics.sh/integrations/posthog)                   | Product Analytics |
 | [Google Analytics](https://nextlytics.sh/integrations/google-analytics) | Web Analytics     |
 | [ClickHouse](https://nextlytics.sh/integrations/clickhouse)             | Database          |

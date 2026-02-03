@@ -17,7 +17,7 @@ export const packageManagers = {
 
 export const backendConfigs = {
   segment: {
-    label: "Segment / Jitsu",
+    label: "Segment or Jitsu",
     code: segmentMeta.snippet!,
   },
   supabase: {
