@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { headers as analyticsHeaders } from "./headers";
+import { headers as analyticsHeaders } from "./server-component-context";
 import type {
   DispatchResult,
   NextlyticsConfig,
@@ -20,11 +20,11 @@ function createRequestContext(request: NextRequest): RequestContext {
 
 export function createHandlers(
   config: NextlyticsConfig,
-  dispatchEvent: (event: NextlyticsEvent, ctx?: RequestContext) => DispatchResult,
+  dispatchEvent: (event: NextlyticsEvent, ctx: RequestContext) => DispatchResult,
   updateEvent: (
     eventId: string,
     patch: Partial<NextlyticsEvent>,
-    ctx?: RequestContext
+    ctx: RequestContext
   ) => Promise<void>
 ): AppRouteHandlers {
   return {

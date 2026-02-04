@@ -1,11 +1,14 @@
 import type { ReactNode } from "react";
 import { headers, cookies } from "next/headers";
-import { headers as analyticsHeaders, removeSensitiveHeaders } from "./headers";
+import { removeSensitiveHeaders } from "./headers";
+import {
+  headers as analyticsHeaders,
+  restoreServerComponentContext,
+} from "./server-component-context";
 import { NextlyticsClient } from "./client";
 import type {
   ClientAction,
   DispatchResult,
-  JavascriptTemplate,
   NextlyticsBackend,
   NextlyticsConfig,
   NextlyticsEvent,
@@ -13,24 +16,17 @@ import type {
   NextlyticsResult,
   RequestContext,
   ServerEventContext,
-  TemplatizedScriptInsertion,
 } from "./types";
 import { createHandlers } from "./handlers";
 import { logConfigWarnings, validateConfig, withDefaults } from "./config-helpers";
 import { createNextlyticsMiddleware } from "./middleware";
 import { generateId } from "./uitils";
 
-// Module-level config store for NextlyticsServer to access
-let globalConfig: NextlyticsConfig | null = null;
-
-function resolveBackends(config: NextlyticsConfig, ctx?: RequestContext): NextlyticsBackend[] {
+function resolveBackends(config: NextlyticsConfig, ctx: RequestContext): NextlyticsBackend[] {
   const backends = config.backends || [];
   return backends
     .map((backend) => {
       if (typeof backend === "function") {
-        if (!ctx) {
-          return null;
-        }
         return backend(ctx);
       }
       return backend;
@@ -38,7 +34,7 @@ function resolveBackends(config: NextlyticsConfig, ctx?: RequestContext): Nextly
     .filter((b): b is NextlyticsBackend => b !== null);
 }
 
-function resolvePlugins(config: NextlyticsConfig, ctx?: RequestContext): NextlyticsPlugin[] {
+function resolvePlugins(config: NextlyticsConfig, ctx: RequestContext): NextlyticsPlugin[] {
   const plugins = config.plugins || [];
   return plugins
     .map((plugin) => {
@@ -64,61 +60,27 @@ function mergeClientActions(actions: (ClientAction | void | undefined)[]): Clien
   return { items };
 }
 
-/** Collect script templates from all backends */
-export function collectTemplates(
-  backends: NextlyticsBackend[]
-): Record<string, JavascriptTemplate> {
-  const templates: Record<string, JavascriptTemplate> = {};
-  for (const backend of backends) {
-    if (backend.getClientSideTemplates) {
-      Object.assign(templates, backend.getClientSideTemplates());
-    }
-  }
-  return templates;
-}
-
-/** Parse compact scripts header: templateId=params;templateId2=params2 */
-function parseScriptsHeader(header: string): TemplatizedScriptInsertion<unknown>[] {
-  const scripts: TemplatizedScriptInsertion<unknown>[] = [];
-  for (const part of header.split(";")) {
-    const eqIdx = part.indexOf("=");
-    if (eqIdx === -1) continue;
-    const templateId = part.slice(0, eqIdx);
-    const paramsJson = part.slice(eqIdx + 1);
-    try {
-      const params = JSON.parse(paramsJson);
-      scripts.push({ type: "script-template", templateId, params });
-    } catch {
-      console.warn(`[Nextlytics] Failed to parse script params for ${templateId}`);
-    }
-  }
-  return scripts;
+export async function createRequestContext(): Promise<RequestContext> {
+  const [_cookies, _headers] = await Promise.all([cookies(), headers()]);
+  return {
+    cookies: _cookies,
+    headers: _headers,
+  };
 }
 
 export async function NextlyticsServer({ children }: { children: ReactNode }) {
   const headersList = await headers();
-  const pageRenderId = headersList.get(analyticsHeaders.pageRenderId);
+  const ctx = restoreServerComponentContext(headersList);
 
-  if (!pageRenderId) {
+  if (!ctx) {
     console.warn(
       "[Nextlytics] nextlyticsMiddleware should be added in order for NextlyticsServer to work"
     );
     return <>{children}</>;
   }
 
-  // Read scripts from header (compact format: templateId=params;...)
-  const scriptsHeader = headersList.get(analyticsHeaders.scripts);
-  const scripts = scriptsHeader ? parseScriptsHeader(scriptsHeader) : undefined;
-
-  // Collect templates from backends (static, no request context needed)
-  let templates: Record<string, JavascriptTemplate> = {};
-  if (globalConfig) {
-    const backends = resolveBackends(globalConfig);
-    templates = collectTemplates(backends);
-  }
-
   return (
-    <NextlyticsClient requestId={pageRenderId} scripts={scripts} templates={templates}>
+    <NextlyticsClient requestId={ctx.pageRenderId} scripts={ctx.scripts} templates={ctx.templates}>
       {children}
     </NextlyticsClient>
   );
@@ -126,13 +88,12 @@ export async function NextlyticsServer({ children }: { children: ReactNode }) {
 
 export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
   const config = withDefaults(userConfig);
-  globalConfig = config; // Store for NextlyticsServer to access
 
   // Validate config and log warnings
   const validationResult = validateConfig(config);
   logConfigWarnings(validationResult);
 
-  const dispatchEventInternal = (event: NextlyticsEvent, ctx?: RequestContext): DispatchResult => {
+  const dispatchEventInternal = (event: NextlyticsEvent, ctx: RequestContext): DispatchResult => {
     const plugins = resolvePlugins(config, ctx);
     const backends = resolveBackends(config, ctx);
 
@@ -193,7 +154,7 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
   const updateEventInternal = async (
     eventId: string,
     patch: Partial<NextlyticsEvent>,
-    ctx?: RequestContext
+    ctx: RequestContext
   ): Promise<void> => {
     const backends = resolveBackends(config, ctx).filter((backend) => backend.supportsUpdates);
     const results = await Promise.all(
@@ -218,10 +179,15 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     }
   };
 
-  // Public API without context (factory backends won't be called)
-  const dispatchEvent = (event: NextlyticsEvent) => dispatchEventInternal(event);
-  const updateEvent = (eventId: string, patch: Partial<NextlyticsEvent>) =>
-    updateEventInternal(eventId, patch);
+  // Public API - creates context from Next.js headers/cookies
+  const dispatchEvent = async (event: NextlyticsEvent) => {
+    const ctx = await createRequestContext();
+    return dispatchEventInternal(event, ctx);
+  };
+  const updateEvent = async (eventId: string, patch: Partial<NextlyticsEvent>) => {
+    const ctx = await createRequestContext();
+    return updateEventInternal(eventId, patch, ctx);
+  };
 
   const middleware = createNextlyticsMiddleware(config, dispatchEventInternal, updateEventInternal);
   const handlers = createHandlers(config, dispatchEventInternal, updateEventInternal);

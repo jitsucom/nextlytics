@@ -1,31 +1,51 @@
 import type { NextMiddleware, NextRequest } from "next/server";
 import { NextResponse, after } from "next/server";
-import { headers as analyticsHeaders } from "./headers";
+import {
+  headers as analyticsHeaders,
+  serializeServerComponentContext,
+} from "./server-component-context";
 import type {
-  ClientAction,
   ClientContext,
   DispatchResult,
+  JavascriptTemplate,
+  NextlyticsBackend,
   NextlyticsEvent,
   RequestContext,
   ServerEventContext,
+  TemplatizedScriptInsertion,
   UserContext,
 } from "./types";
 import type { NextlyticsConfigWithDefaults } from "./config-helpers";
 import { generateId, getRequestInfo, createServerContext } from "./uitils";
 import { resolveAnonymousUser } from "./anonymous-user";
 
-type DispatchEvent = (event: NextlyticsEvent, ctx?: RequestContext) => DispatchResult;
+type DispatchEvent = (event: NextlyticsEvent, ctx: RequestContext) => DispatchResult;
 type UpdateEvent = (
   eventId: string,
   patch: Partial<NextlyticsEvent>,
-  ctx?: RequestContext
+  ctx: RequestContext
 ) => Promise<void>;
 
-/** Serialize script-template actions to compact header format: templateId=params;... */
-function serializeScriptActions(actions: ClientAction): string | null {
-  const scripts = actions.items.filter((item) => item.type === "script-template");
-  if (scripts.length === 0) return null;
-  return scripts.map((s) => `${s.templateId}=${JSON.stringify(s.params)}`).join(";");
+/** Resolve backend factories to actual backends */
+function resolveBackends(
+  config: NextlyticsConfigWithDefaults,
+  ctx: RequestContext
+): NextlyticsBackend[] {
+  const backends = config.backends || [];
+  return backends
+    .map((backend) => (typeof backend === "function" ? backend(ctx) : backend))
+    .filter((b): b is NextlyticsBackend => b !== null);
+}
+
+/** Collect script templates from all backends */
+function collectTemplates(backends: NextlyticsBackend[]): Record<string, JavascriptTemplate> {
+  const templates: Record<string, JavascriptTemplate> = {};
+  for (const backend of backends) {
+    if (backend.getClientSideTemplates) {
+      Object.assign(templates, backend.getClientSideTemplates());
+    }
+  }
+  return templates;
 }
 
 function createRequestContext(request: NextRequest): RequestContext {
@@ -66,24 +86,41 @@ export function createNextlyticsMiddleware(
     // Resolve anonymous user ID (sets cookie if needed)
     const { anonId } = await resolveAnonymousUser(request, response, serverContext, config);
 
-    response.headers.set(analyticsHeaders.pathname, request.nextUrl.pathname);
-    response.headers.set(analyticsHeaders.search, request.nextUrl.search);
-    response.headers.set(analyticsHeaders.pageRenderId, pageRenderId);
+    // Collect templates from backends
+    const ctx = createRequestContext(request);
+    const backends = resolveBackends(config, ctx);
+    const templates = collectTemplates(backends);
+
+    // Prepare scripts (will be populated if pageView is dispatched)
+    let scripts: TemplatizedScriptInsertion<unknown>[] = [];
 
     // Only dispatch page view on server if pageViewMode is "server" (default)
     if (config.pageViewMode !== "client-init") {
       // Check if path should be excluded
       if (config.excludePaths?.(pathname)) {
+        serializeServerComponentContext(response, {
+          pageRenderId,
+          pathname: request.nextUrl.pathname,
+          search: request.nextUrl.search,
+          scripts,
+          templates,
+        });
         return response;
       }
 
       // Check if API calls should be excluded
       const isApiPath = config.isApiPath(pathname);
       if (isApiPath && config.excludeApiCalls) {
+        serializeServerComponentContext(response, {
+          pageRenderId,
+          pathname: request.nextUrl.pathname,
+          search: request.nextUrl.search,
+          scripts,
+          templates,
+        });
         return response;
       }
 
-      const ctx = createRequestContext(request);
       const userContext = await getUserContext(config, ctx);
       const pageViewEvent = createPageViewEvent(
         pageRenderId,
@@ -97,15 +134,23 @@ export function createNextlyticsMiddleware(
       const { clientActions, completion } = dispatchEvent(pageViewEvent, ctx);
       const actions = await clientActions;
 
-      // Set scripts header in compact format: templateId=params;...
-      const scriptsHeader = serializeScriptActions(actions);
-      if (scriptsHeader) {
-        response.headers.set(analyticsHeaders.scripts, scriptsHeader);
-      }
+      // Extract script-template actions
+      scripts = actions.items.filter(
+        (i): i is TemplatizedScriptInsertion<unknown> => i.type === "script-template"
+      );
 
       // Defer full completion to after response
       after(() => completion);
     }
+
+    // Serialize context to headers
+    serializeServerComponentContext(response, {
+      pageRenderId,
+      pathname: request.nextUrl.pathname,
+      search: request.nextUrl.search,
+      scripts,
+      templates,
+    });
 
     return response;
   };

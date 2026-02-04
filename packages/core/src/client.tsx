@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, createContext, useContext, type ReactNode } from "react";
 import type { ClientContext, JavascriptTemplate, TemplatizedScriptInsertion } from "./types";
-import { headers } from "./headers";
+import { headers } from "./server-component-context";
 import { compile, apply, type CompiledTemplate, type TemplateFunctions } from "./template";
 
 const templateFunctions: TemplateFunctions = {

@@ -237,7 +237,7 @@ export type NextlyticsResult = {
   /** Middleware to intercept requests */
   middleware: NextMiddleware;
   /** Manually dispatch event (returns two-phase result) */
-  dispatchEvent: (event: NextlyticsEvent) => DispatchResult;
+  dispatchEvent: (event: NextlyticsEvent) => Promise<DispatchResult>;
   /** Manually update existing event */
   updateEvent: (eventId: string, patch: Partial<NextlyticsEvent>) => Promise<void>;
 };
