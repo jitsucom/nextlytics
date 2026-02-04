@@ -69,9 +69,7 @@ function parseScriptsHeader(header: string): TemplatizedScriptInsertion<unknown>
 }
 
 /** Restore context from request headers (called in server components) */
-export function restoreServerComponentContext(
-  headersList: Headers
-): ServerComponentContext | null {
+export function restoreServerComponentContext(headersList: Headers): ServerComponentContext | null {
   const pageRenderId = headersList.get(headerKeys.pageRenderId);
   if (!pageRenderId) {
     return null;
