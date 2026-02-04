@@ -42,14 +42,29 @@ export function getRequestInfo(request: NextRequest): RequestInfo {
     pathname
   );
 
-  // Check for prefetch
-  const isPrefetch =
+  // Standard prefetch detection via documented headers
+  // Note: next-router-prefetch is often missing in App Router due to a bug
+  // See: https://github.com/vercel/next.js/issues/63728
+  const hasStandardPrefetchHeader =
     headers.get("next-router-prefetch") === "1" ||
     headers.get("purpose") === "prefetch" ||
     headers.get("sec-purpose") === "prefetch";
 
+  // RSC prefetch heuristic using next-url header.
+  // When next-url is present and differs from request path, it indicates the request
+  // originated from a different page (prefetch during hover/viewport intersection).
+  //
+  // Warning: next-url is an undocumented internal header.
+  // See: https://github.com/vercel/next.js/issues/57762 (Lee Robinson: "not recommended")
+  // See: https://github.com/vercel/next.js/discussions/49824 (soft vs hard nav detection)
+  // See: https://github.com/vercel/next.js/discussions/37736 (prefetch detection workarounds)
+  const nextUrl = headers.get("next-url");
+  const isRscPrefetch = nextUrl !== null && nextUrl !== pathname;
+
+  const isPrefetch = hasStandardPrefetchHeader || isRscPrefetch;
+
   // Check for RSC navigation (client-side Next.js navigation)
-  const isRsc = !!(headers.get("next-url") || headers.get("rsc"));
+  const isRsc = !!(nextUrl || headers.get("rsc"));
 
   // Check for standard document navigation
   const secFetchDest = headers.get("sec-fetch-dest");
