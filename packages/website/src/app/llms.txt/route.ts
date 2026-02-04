@@ -107,7 +107,7 @@ function generateLlmsTxt(): string {
   // Links
   lines.push("## Links");
   lines.push("");
-  lines.push("- GitHub: https://github.com/jitsu/nextlytics");
+  lines.push("- GitHub: https://github.com/jitsucom/nextlytics");
   lines.push("- License: MIT");
   lines.push("- Built by Jitsu: https://jitsu.com");
 

@@ -82,7 +82,7 @@ const jsonLd = {
       name: "Nextlytics",
       url: "https://nextlytics.dev",
       logo: "https://nextlytics.dev/icon.svg",
-      sameAs: ["https://github.com/jitsu/nextlytics"],
+      sameAs: ["https://github.com/jitsucom/nextlytics"],
     },
     {
       "@type": "SoftwareApplication",

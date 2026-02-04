@@ -24,7 +24,7 @@ export function SiteFooter() {
             Blog
           </Link>
           <Link
-            href="https://github.com/jitsu/nextlytics"
+            href="https://github.com/jitsucom/nextlytics"
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             target="_blank"
             rel="noopener noreferrer"
@@ -32,7 +32,7 @@ export function SiteFooter() {
             GitHub
           </Link>
           <Link
-            href="https://github.com/jitsu/nextlytics/blob/main/LICENSE"
+            href="https://github.com/jitsucom/nextlytics/blob/main/LICENSE"
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             target="_blank"
             rel="noopener noreferrer"

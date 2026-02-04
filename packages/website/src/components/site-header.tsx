@@ -94,7 +94,7 @@ export function SiteHeader() {
           </Button>
           <Button asChild variant="ghost" size="icon-sm" aria-label="GitHub">
             <Link
-              href="https://github.com/jitsu/nextlytics"
+              href="https://github.com/jitsucom/nextlytics"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -160,7 +160,7 @@ export function SiteHeader() {
               </Button>
               <Button asChild variant="ghost" size="icon-sm" aria-label="GitHub">
                 <Link
-                  href="https://github.com/jitsu/nextlytics"
+                  href="https://github.com/jitsucom/nextlytics"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
