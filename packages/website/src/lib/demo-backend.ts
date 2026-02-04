@@ -51,7 +51,7 @@ export function createDemoBackend(config: DemoBackendConfig = {}): NextlyticsBac
       supportsUpdates: true,
 
       async onEvent(event: NextlyticsEvent): Promise<void> {
-        if (!event.serverContext.path.startsWith("/demo")) {
+        if (!event.serverContext.path.startsWith("/demo") && !event.serverContext.path.startsWith("/api/demo")) {
           return;
         }
         log("onEvent:", event.type, event.eventId);
