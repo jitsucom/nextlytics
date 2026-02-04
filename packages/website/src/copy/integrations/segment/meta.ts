@@ -16,18 +16,11 @@ export const meta: IntegrationMeta = {
     "</svg>",
   ].join("\n"),
   officialDocs: "https://segment.com/docs/connections/sources/catalog/libraries/server/http-api/",
-  snippet: [
-    "// src/nextlytics.ts",
-    'import { Nextlytics } from "@nextlytics/core/server";',
-    'import { segmentBackend } from "@nextlytics/core/backends/segment";',
-    "",
-    "export const { middleware, handlers, analytics } = Nextlytics({",
-    "  backends: [",
+  backendImport: 'import { segmentBackend } from "@nextlytics/core/backends/segment";',
+  backendConfig: [
     "    segmentBackend({",
     "      writeKey: process.env.SEGMENT_WRITE_KEY!,",
     '      // For Jitsu: host: "https://ingest.g.jitsu.com"',
     "    }),",
-    "  ],",
-    "});",
   ].join("\n"),
 };

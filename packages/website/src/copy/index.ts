@@ -15,18 +15,48 @@ export const packageManagers = {
   yarn: "yarn add @nextlytics/core",
 } as const;
 
+/**
+ * Generates a full Nextlytics config snippet with the given backend-specific parts.
+ */
+export function configSnippet(backendImport: string, backendConfig: string): string {
+  return [
+    "// src/nextlytics.ts",
+    'import { Nextlytics } from "@nextlytics/core/server";',
+    backendImport,
+    "// Optional: import your auth library to track authenticated users",
+    'import { auth } from "./lib/auth"; // next-auth',
+    "",
+    "export const { middleware, handlers, analytics } = Nextlytics({",
+    "  backends: [",
+    backendConfig,
+    "  ],",
+    "  // Optional but recommended: identify authenticated users",
+    "  callbacks: {",
+    "    async getUser() {",
+    "      const session = await auth();",
+    "      if (!session?.user) return null;",
+    "      return {",
+    "        userId: session.user.id,",
+    "        traits: { email: session.user.email, name: session.user.name },",
+    "      };",
+    "    },",
+    "  },",
+    "});",
+  ].join("\n");
+}
+
 export const backendConfigs = {
   segment: {
     label: "Segment or Jitsu",
-    code: segmentMeta.snippet!,
+    code: configSnippet(segmentMeta.backendImport!, segmentMeta.backendConfig!),
   },
   supabase: {
     label: "Supabase",
-    code: supabaseMeta.snippet!,
+    code: configSnippet(supabaseMeta.backendImport!, supabaseMeta.backendConfig!),
   },
   ga: {
     label: "Google Analytics",
-    code: googleAnalyticsMeta.snippet!,
+    code: configSnippet(googleAnalyticsMeta.backendImport!, googleAnalyticsMeta.backendConfig!),
   },
 } as const;
 

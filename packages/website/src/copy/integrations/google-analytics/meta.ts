@@ -18,18 +18,11 @@ export const meta: IntegrationMeta = {
     "</svg>",
   ].join("\n"),
   officialDocs: "https://developers.google.com/analytics/devguides/collection/protocol/ga4",
-  snippet: [
-    "// src/nextlytics.ts",
-    'import { Nextlytics } from "@nextlytics/core/server";',
-    'import { googleAnalyticsBackend } from "@nextlytics/core/backends/ga";',
-    "",
-    "export const { middleware, handlers, analytics } = Nextlytics({",
-    "  backends: [",
+  backendImport: 'import { googleAnalyticsBackend } from "@nextlytics/core/backends/ga";',
+  backendConfig: [
     "    googleAnalyticsBackend({",
     '      measurementId: "G-XXXXXXXXXX",',
     "      apiSecret: process.env.GA_API_SECRET!,",
     "    }),",
-    "  ],",
-    "});",
   ].join("\n"),
 };

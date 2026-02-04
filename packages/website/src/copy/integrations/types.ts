@@ -19,6 +19,10 @@ export type IntegrationMeta = {
   logoSvg?: string;
   logoAlt?: string;
   officialDocs?: string;
-  /** Code snippet for main page examples */
+  /** Full code snippet for integration-specific pages */
   snippet?: string;
+  /** Backend import line for configSnippet() */
+  backendImport?: string;
+  /** Backend config (the array element inside backends: []) */
+  backendConfig?: string;
 };

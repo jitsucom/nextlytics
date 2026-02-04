@@ -43,8 +43,10 @@ npm install @nextlytics/core
 **1. Configure your backend** (`src/nextlytics.ts`)
 
 ```typescript
-import { Nextlytics } from "@nextlytics/core";
+import { Nextlytics } from "@nextlytics/core/server";
 import { segmentBackend } from "@nextlytics/core/backends/segment";
+// Optional: import your auth library to track authenticated users
+import { auth } from "./lib/auth"; // next-auth
 
 export const { middleware, handlers, analytics } = Nextlytics({
   backends: [
@@ -52,6 +54,17 @@ export const { middleware, handlers, analytics } = Nextlytics({
       writeKey: process.env.SEGMENT_WRITE_KEY!,
     }),
   ],
+  // Optional but recommended: identify authenticated users
+  callbacks: {
+    async getUser() {
+      const session = await auth();
+      if (!session?.user) return null;
+      return {
+        userId: session.user.id,
+        traits: { email: session.user.email, name: session.user.name },
+      };
+    },
+  },
 });
 ```
 

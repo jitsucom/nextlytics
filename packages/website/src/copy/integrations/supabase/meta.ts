@@ -22,18 +22,11 @@ export const meta: IntegrationMeta = {
     "</svg>",
   ].join("\n"),
   officialDocs: "https://supabase.com/docs",
-  snippet: [
-    "// src/nextlytics.ts",
-    'import { Nextlytics } from "@nextlytics/core/server";',
-    'import { postgrestBackend } from "@nextlytics/core/backends/postgrest";',
-    "",
-    "export const { middleware, handlers, analytics } = Nextlytics({",
-    "  backends: [",
+  backendImport: 'import { postgrestBackend } from "@nextlytics/core/backends/postgrest";',
+  backendConfig: [
     "    postgrestBackend({",
     '      url: process.env.SUPABASE_URL! + "/rest/v1",',
     "      apiKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,",
     "    }),",
-    "  ],",
-    "});",
   ].join("\n"),
 };
