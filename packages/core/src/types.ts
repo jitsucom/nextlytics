@@ -79,6 +79,7 @@ export interface NextlyticsEvent {
   properties: Record<string, unknown>;
 }
 
+import type { RequestCookies } from "next/dist/server/web/spec-extension/cookies";
 import type { NextMiddleware, NextRequest } from "next/server";
 
 export type AnonymousUserResult = {
@@ -86,21 +87,11 @@ export type AnonymousUserResult = {
   anonId: string;
 };
 
-/** Minimal cookie interface compatible with both middleware and route handlers */
-export interface CookieStore {
-  get(name: string): { name: string; value: string } | undefined;
-}
-
-/** Minimal headers interface */
-export interface HeadersLike {
-  get(name: string): string | null;
-  forEach(callback: (value: string, key: string) => void): void;
-}
-
-/** Headers and cookies context for backend/plugin factories */
+/** Headers and cookies context for backend/plugin factories. Uses Pick for compatibility with both
+ * middleware (RequestCookies) and server components (ReadonlyRequestCookies) */
 export type RequestContext = {
-  headers: HeadersLike;
-  cookies: CookieStore;
+  headers: Headers;
+  cookies: Pick<RequestCookies, "get" | "getAll" | "has">;
 };
 
 export type NextlyticsPlugin = {

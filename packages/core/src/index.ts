@@ -14,7 +14,5 @@ export type {
   ClientContext,
   UserContext,
   RequestContext,
-  CookieStore,
-  HeadersLike,
   AnonymousUserResult,
 } from "./types";

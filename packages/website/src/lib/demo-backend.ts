@@ -1,4 +1,4 @@
-import type { NextlyticsBackendFactory, NextlyticsEvent, CookieStore } from "@nextlytics/core";
+import type { NextlyticsBackendFactory, NextlyticsEvent, RequestContext } from "@nextlytics/core";
 import { NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 
@@ -16,7 +16,10 @@ export async function getSessionEvents(sessionId: string): Promise<NextlyticsEve
   return data || [];
 }
 
-export function getOrCreateSessionId(cookies: CookieStore): { sessionId: string; isNew: boolean } {
+export function getOrCreateSessionId(cookies: RequestContext["cookies"]): {
+  sessionId: string;
+  isNew: boolean;
+} {
   const existingSession = cookies.get(SESSION_COOKIE)?.value;
   if (existingSession) {
     return { sessionId: existingSession, isNew: false };
@@ -51,7 +54,10 @@ export function createDemoBackend(config: DemoBackendConfig = {}): NextlyticsBac
       supportsUpdates: true,
 
       async onEvent(event: NextlyticsEvent): Promise<void> {
-        if (!event.serverContext.path.startsWith("/demo") && !event.serverContext.path.startsWith("/api/demo")) {
+        if (
+          !event.serverContext.path.startsWith("/demo") &&
+          !event.serverContext.path.startsWith("/api/demo")
+        ) {
           return;
         }
         log("onEvent:", event.type, event.eventId);
