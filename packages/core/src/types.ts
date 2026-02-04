@@ -149,7 +149,7 @@ export type NextlyticsConfig = {
     getUser?: (ctx: RequestContext) => Promise<UserContext>;
     /** Override anonymous user ID generation */
     getAnonymousUserId?: (opts: {
-      request: NextRequest;
+      ctx: RequestContext;
       originalAnonymousUserId?: string;
     }) => Promise<AnonymousUserResult>;
   };

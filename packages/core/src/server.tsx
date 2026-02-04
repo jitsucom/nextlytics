@@ -5,6 +5,7 @@ import {
   headers as analyticsHeaders,
   restoreServerComponentContext,
 } from "./server-component-context";
+import { resolveAnonymousUser } from "./anonymous-user";
 import { NextlyticsClient } from "./client";
 import type {
   ClientAction,
@@ -200,6 +201,9 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     const serverContext = createServerContextFromHeaders(headersList);
     const ctx: RequestContext = { headers: headersList, cookies: cookieStore };
 
+    // Resolve anonymous user ID
+    const { anonId: anonymousUserId } = await resolveAnonymousUser({ ctx, serverContext, config });
+
     // Get user context if callback is configured
     let userContext: NextlyticsEvent["userContext"];
     if (config.callbacks.getUser) {
@@ -225,6 +229,7 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
           parentEventId: pageRenderId,
           type: eventName,
           collectedAt: new Date().toISOString(),
+          anonymousUserId,
           serverContext,
           userContext,
           properties: opts?.props || {},

@@ -51,6 +51,9 @@ export function createDemoBackend(config: DemoBackendConfig = {}): NextlyticsBac
       supportsUpdates: true,
 
       async onEvent(event: NextlyticsEvent): Promise<void> {
+        if (!event.serverContext.path.startsWith("/demo")) {
+          return;
+        }
         log("onEvent:", event.type, event.eventId);
         await redis.rpush(key, event);
         await redis.expire(key, SESSION_TTL);

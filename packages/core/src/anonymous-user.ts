@@ -1,18 +1,30 @@
-import type { NextRequest } from "next/server";
 import type { NextResponse } from "next/server";
-import type { NextlyticsConfigWithDefaults } from "./config-helpers";
-import type { AnonymousUserResult, ServerEventContext } from "./types";
+import type {
+  AnonymousUserResult,
+  NextlyticsConfig,
+  RequestContext,
+  ServerEventContext,
+} from "./types";
 
 const BASE62_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const ANON_ID_LENGTH = 10; // 62^10 ≈ 8.4 × 10^17 combinations
 
+// Defaults for anonymous user config
+const DEFAULTS = {
+  gdprMode: true,
+  useCookies: false,
+  dailySalt: true,
+  cookieName: "__nextlytics_anon",
+  cookieMaxAge: 60 * 60 * 24 * 365 * 2, // 2 years
+} as const;
+
 /**
- * Check if the request is over HTTPS using headers or URL.
+ * Check if the request is over HTTPS using headers.
  */
-function isSecureRequest(request: NextRequest): boolean {
-  const proto = request.headers.get("x-forwarded-proto");
+function isSecureRequest(headers: RequestContext["headers"]): boolean {
+  const proto = headers.get("x-forwarded-proto");
   if (proto) return proto === "https";
-  return request.url.startsWith("https:");
+  return false;
 }
 
 /**
@@ -74,6 +86,14 @@ function generateRandomAnonId(): string {
   return bytesToBase62(bytes, ANON_ID_LENGTH);
 }
 
+export type ResolveAnonymousUserParams = {
+  ctx: RequestContext;
+  serverContext: ServerEventContext;
+  config: NextlyticsConfig;
+  /** Optional response for setting cookies. If not provided, cookies won't be set. */
+  response?: NextResponse | null;
+};
+
 /**
  * Resolve anonymous user ID based on config.
  *
@@ -81,24 +101,26 @@ function generateRandomAnonId(): string {
  * - gdprMode=true (default): Hash-based ID (Fathom-like)
  * - gdprMode=false + useCookies=true: Persistent cookie-based ID
  * - gdprMode=false + useCookies=false: Random ID per request
- *
- * @param response - Pass response to set cookie (null for POST handlers where cookie was already set)
  */
 export async function resolveAnonymousUser(
-  request: NextRequest,
-  response: NextResponse | null,
-  serverContext: ServerEventContext,
-  config: NextlyticsConfigWithDefaults
+  params: ResolveAnonymousUserParams
 ): Promise<AnonymousUserResult> {
-  const { anonymousUsers, callbacks } = config;
-  const { gdprMode, useCookies, dailySalt, cookieName, cookieMaxAge } = anonymousUsers;
+  const { ctx, serverContext, config, response } = params;
+  const { headers, cookies } = ctx;
+
+  // Apply defaults
+  const gdprMode = config.anonymousUsers?.gdprMode ?? DEFAULTS.gdprMode;
+  const useCookies = config.anonymousUsers?.useCookies ?? DEFAULTS.useCookies;
+  const dailySalt = config.anonymousUsers?.dailySalt ?? DEFAULTS.dailySalt;
+  const cookieName = config.anonymousUsers?.cookieName ?? DEFAULTS.cookieName;
+  const cookieMaxAge = config.anonymousUsers?.cookieMaxAge ?? DEFAULTS.cookieMaxAge;
 
   let anonId: string;
   let shouldSetCookie = false;
 
   // Check for existing cookie first (only if useCookies is enabled)
   if (useCookies) {
-    const existingCookie = request.cookies.get(cookieName);
+    const existingCookie = cookies.get(cookieName);
     if (existingCookie?.value) {
       anonId = existingCookie.value;
     } else {
@@ -120,10 +142,10 @@ export async function resolveAnonymousUser(
   }
 
   // Allow user override via callback
-  if (callbacks.getAnonymousUserId) {
+  if (config.callbacks?.getAnonymousUserId) {
     try {
-      const overrideResult = await callbacks.getAnonymousUserId({
-        request,
+      const overrideResult = await config.callbacks.getAnonymousUserId({
+        ctx,
         originalAnonymousUserId: anonId,
       });
       anonId = overrideResult.anonId;
@@ -137,7 +159,7 @@ export async function resolveAnonymousUser(
     response.cookies.set(cookieName, anonId, {
       maxAge: cookieMaxAge,
       httpOnly: true,
-      secure: isSecureRequest(request),
+      secure: isSecureRequest(headers),
       sameSite: "lax",
       path: "/",
     });

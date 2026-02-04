@@ -82,12 +82,12 @@ export function createNextlyticsMiddleware(
     const pageRenderId = generateId();
     const serverContext = createServerContext(request);
     const response = NextResponse.next();
+    const ctx = createRequestContext(request);
 
     // Resolve anonymous user ID (sets cookie if needed)
-    const { anonId } = await resolveAnonymousUser(request, response, serverContext, config);
+    const { anonId } = await resolveAnonymousUser({ ctx, serverContext, config, response });
 
     // Collect templates from backends
-    const ctx = createRequestContext(request);
     const backends = resolveBackends(config, ctx);
     const templates = collectTemplates(backends);
 
@@ -210,12 +210,7 @@ async function handleEventPost(
   const ctx = createRequestContext(request);
   const serverContext = createServerContext(request);
   const userContext = await getUserContext(config, ctx);
-  const { anonId: anonymousUserId } = await resolveAnonymousUser(
-    request,
-    null,
-    serverContext,
-    config
-  );
+  const { anonId: anonymousUserId } = await resolveAnonymousUser({ ctx, serverContext, config });
 
   if (type === "client-init") {
     const clientContext = payload as unknown as ClientContext;
