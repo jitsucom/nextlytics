@@ -34,13 +34,14 @@ npm install @nextlytics/core
 // src/nextlytics.ts
 import { Nextlytics } from "@nextlytics/core/server";
 import { vercelGeoPlugin } from "@nextlytics/core/plugins/vercel-geo";
-import { posthogBackend } from "@nextlytics/core/backends/posthog";
+import { postgrestBackend } from "@nextlytics/core/backends/postgrest";
 
 export const { middleware, handlers, analytics } = Nextlytics({
   plugins: [vercelGeoPlugin()],
   backends: [
-    posthogBackend({
-      /* ... */
+    postgrestBackend({
+      url: process.env.SUPABASE_URL! + "/rest/v1",
+      apiKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
     }),
   ],
 });
