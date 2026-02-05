@@ -29,4 +29,16 @@ export const meta: IntegrationMeta = {
     "      apiKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,",
     "    }),",
   ].join("\n"),
+  authImport: 'import { createClient } from "@/lib/supabase/server";',
+  authCallback: [
+    "    async getUser() {",
+    "      const supabase = await createClient();",
+    "      const { data: { user } } = await supabase.auth.getUser();",
+    "      if (!user) return null;",
+    "      return {",
+    "        userId: user.id,",
+    "        traits: { email: user.email },",
+    "      };",
+    "    },",
+  ].join("\n"),
 };

@@ -15,31 +15,45 @@ export const packageManagers = {
   yarn: "yarn add @nextlytics/core",
 } as const;
 
+const defaultAuthImport = 'import { auth } from "./lib/auth"; // next-auth';
+const defaultAuthCallback = [
+  "    async getUser() {",
+  "      const session = await auth();",
+  "      if (!session?.user) return null;",
+  "      return {",
+  "        userId: session.user.id,",
+  "        traits: { email: session.user.email, name: session.user.name },",
+  "      };",
+  "    },",
+].join("\n");
+
+type ConfigSnippetOptions = {
+  backendImport: string;
+  backendConfig: string;
+  authImport?: string;
+  authCallback?: string;
+};
+
 /**
  * Generates a full Nextlytics config snippet with the given backend-specific parts.
  */
-export function configSnippet(backendImport: string, backendConfig: string): string {
+export function configSnippet(opts: ConfigSnippetOptions): string {
+  const authImport = opts.authImport ?? defaultAuthImport;
+  const authCallback = opts.authCallback ?? defaultAuthCallback;
   return [
     "// src/nextlytics.ts",
     'import { Nextlytics } from "@nextlytics/core/server";',
-    backendImport,
+    opts.backendImport,
     "// Optional: import your auth library to track authenticated users",
-    'import { auth } from "./lib/auth"; // next-auth',
+    authImport,
     "",
     "export const { middleware, handlers, analytics } = Nextlytics({",
     "  backends: [",
-    backendConfig,
+    opts.backendConfig,
     "  ],",
     "  // Optional but recommended: identify authenticated users",
     "  callbacks: {",
-    "    async getUser() {",
-    "      const session = await auth();",
-    "      if (!session?.user) return null;",
-    "      return {",
-    "        userId: session.user.id,",
-    "        traits: { email: session.user.email, name: session.user.name },",
-    "      };",
-    "    },",
+    authCallback,
     "  },",
     "});",
   ].join("\n");
@@ -48,15 +62,26 @@ export function configSnippet(backendImport: string, backendConfig: string): str
 export const backendConfigs = {
   segment: {
     label: "Segment or Jitsu",
-    code: configSnippet(segmentMeta.backendImport!, segmentMeta.backendConfig!),
+    code: configSnippet({
+      backendImport: segmentMeta.backendImport!,
+      backendConfig: segmentMeta.backendConfig!,
+    }),
   },
   supabase: {
     label: "Supabase",
-    code: configSnippet(supabaseMeta.backendImport!, supabaseMeta.backendConfig!),
+    code: configSnippet({
+      backendImport: supabaseMeta.backendImport!,
+      backendConfig: supabaseMeta.backendConfig!,
+      authImport: supabaseMeta.authImport,
+      authCallback: supabaseMeta.authCallback,
+    }),
   },
   ga: {
     label: "Google Analytics",
-    code: configSnippet(googleAnalyticsMeta.backendImport!, googleAnalyticsMeta.backendConfig!),
+    code: configSnippet({
+      backendImport: googleAnalyticsMeta.backendImport!,
+      backendConfig: googleAnalyticsMeta.backendConfig!,
+    }),
   },
 } as const;
 

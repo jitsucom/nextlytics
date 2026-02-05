@@ -25,4 +25,8 @@ export type IntegrationMeta = {
   backendImport?: string;
   /** Backend config (the array element inside backends: []) */
   backendConfig?: string;
+  /** Auth import line (e.g. next-auth, supabase) */
+  authImport?: string;
+  /** getUser callback body */
+  authCallback?: string;
 };
