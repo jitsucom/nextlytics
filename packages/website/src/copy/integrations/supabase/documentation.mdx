@@ -3,6 +3,8 @@
 ```typescript
 import { Nextlytics } from "@nextlytics/core/server";
 import { postgrestBackend } from "@nextlytics/core/backends/postgrest";
+// Optional: import Supabase client to track authenticated users
+import { createClient } from "@/lib/supabase/server";
 
 export const { middleware, handlers, analytics } = Nextlytics({
   backends: [
@@ -17,6 +19,20 @@ export const { middleware, handlers, analytics } = Nextlytics({
       tableName: "analytics",
     }),
   ],
+  // Optional but recommended: identify authenticated users
+  callbacks: {
+    async getUser() {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return null;
+      return {
+        userId: user.id,
+        traits: { email: user.email },
+      };
+    },
+  },
 });
 ```
 
