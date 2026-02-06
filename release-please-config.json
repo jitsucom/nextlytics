@@ -3,7 +3,8 @@
     "packages/core": {
       "release-type": "node",
       "package-name": "@nextlytics/core",
-      "changelog-path": "../../CHANGELOG.md"
+      "changelog-path": "../../CHANGELOG.md",
+      "include-component-in-tag": false
     }
   },
   "separate-pull-requests": true,
