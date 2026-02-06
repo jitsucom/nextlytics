@@ -5,6 +5,13 @@ import type { ClientContext, JavascriptTemplate, TemplatizedScriptInsertion } fr
 import { headers } from "./server-component-context";
 import { compile, apply, type CompiledTemplate, type TemplateFunctions } from "./template";
 
+/** Context object for Pages Router integration */
+export type NextlyticsContext = {
+  requestId: string;
+  scripts?: TemplatizedScriptInsertion<unknown>[];
+  templates?: Record<string, JavascriptTemplate>;
+};
+
 const templateFunctions: TemplateFunctions = {
   q: (v) => JSON.stringify(v ?? null),
   json: (v) => JSON.stringify(v ?? null),
@@ -142,38 +149,40 @@ async function sendEvent(
 const initializedRequestIds = new Set<string>();
 
 export function NextlyticsClient(props: {
-  requestId: string;
+  ctx?: NextlyticsContext;
+  requestId?: string;
   scripts?: TemplatizedScriptInsertion<unknown>[];
   templates?: Record<string, JavascriptTemplate>;
   children?: ReactNode;
 }) {
-  const templates = props.templates ?? {};
+  // Resolve from ctx or individual props
+  const requestId = props.ctx?.requestId ?? props.requestId ?? "";
+  const scripts = props.ctx?.scripts ?? props.scripts;
+  const templates = props.ctx?.templates ?? props.templates ?? {};
 
   useEffect(() => {
     // Skip if already initialized for this requestId
-    if (initializedRequestIds.has(props.requestId)) return;
-    initializedRequestIds.add(props.requestId);
+    if (initializedRequestIds.has(requestId)) return;
+    initializedRequestIds.add(requestId);
 
     // Execute scripts from server (pageView)
-    if (props.scripts && props.templates) {
-      executeTemplatedScripts(props.scripts, props.templates);
+    if (scripts && Object.keys(templates).length > 0) {
+      executeTemplatedScripts(scripts, templates);
     }
 
     // Send client-init and execute any returned scripts
     const clientContext = createClientContext();
-    sendEvent(
-      props.requestId,
-      "client-init",
-      clientContext as unknown as Record<string, unknown>
-    ).then(({ scripts }) => {
-      if (scripts) {
-        executeTemplatedScripts(scripts, templates);
+    sendEvent(requestId, "client-init", clientContext as unknown as Record<string, unknown>).then(
+      ({ scripts: responseScripts }) => {
+        if (responseScripts) {
+          executeTemplatedScripts(responseScripts, templates);
+        }
       }
-    });
-  }, [props.requestId, props.scripts, props.templates, templates]);
+    );
+  }, [requestId, scripts, templates]);
 
   return (
-    <NextlyticsContext.Provider value={{ requestId: props.requestId, templates }}>
+    <NextlyticsContext.Provider value={{ requestId, templates }}>
       {props.children}
     </NextlyticsContext.Provider>
   );

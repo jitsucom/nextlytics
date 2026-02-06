@@ -94,6 +94,43 @@ export { middleware };
 
 That's it. Every page view is now tracked server-side.
 
+## Pages Router
+
+Nextlytics also supports the Pages Router. The middleware works the same way, but instead of
+`NextlyticsServer`, use `getNextlyticsProps` in your `_app.tsx`:
+
+**1. Configure your backend** (same as App Router - see above)
+
+**2. Add to \_app.tsx** (`pages/_app.tsx`)
+
+```tsx
+import type { AppContext, AppProps } from "next/app";
+import { NextlyticsClient, getNextlyticsProps, type NextlyticsContext } from "@nextlytics/core";
+
+type MyAppProps = AppProps & { nextlyticsCtx: NextlyticsContext };
+
+function MyApp({ Component, pageProps, nextlyticsCtx }: MyAppProps) {
+  return (
+    <NextlyticsClient ctx={nextlyticsCtx}>
+      <Component {...pageProps} />
+    </NextlyticsClient>
+  );
+}
+
+MyApp.getInitialProps = async (appContext: AppContext) => {
+  return {
+    pageProps: appContext.Component.getInitialProps
+      ? await appContext.Component.getInitialProps(appContext.ctx)
+      : {},
+    nextlyticsCtx: getNextlyticsProps(appContext.ctx),
+  };
+};
+
+export default MyApp;
+```
+
+**3. Export middleware** (same as App Router)
+
 ## Supported Backends
 
 | Backend                                                                 | Type              |

@@ -86,25 +86,75 @@ export const backendConfigs = {
 } as const;
 
 export const integrationFiles = {
-  layout: {
-    filename: "src/app/layout.tsx",
-    code: [
-      'import { NextlyticsServer } from "@nextlytics/core/server";',
-      "",
-      "export default function RootLayout({ children }) {",
-      "  return (",
-      '    <html lang="en">',
-      "      <body>",
-      "        <NextlyticsServer>{children}</NextlyticsServer>",
-      "      </body>",
-      "    </html>",
-      "  );",
-      "}",
-    ].join("\n"),
+  appRouter: {
+    label: "App Router",
+    files: [
+      {
+        filename: "src/app/layout.tsx",
+        code: [
+          'import { NextlyticsServer } from "@nextlytics/core/server";',
+          "",
+          "export default function RootLayout({ children }) {",
+          "  return (",
+          '    <html lang="en">',
+          "      <body>",
+          "        <NextlyticsServer>{children}</NextlyticsServer>",
+          "      </body>",
+          "    </html>",
+          "  );",
+          "}",
+        ].join("\n"),
+      },
+      {
+        filename: "src/middleware.ts",
+        code: ['import { middleware } from "./nextlytics";', "", "export { middleware };"].join(
+          "\n"
+        ),
+      },
+    ],
   },
-  middleware: {
-    filename: "src/middleware.ts",
-    code: ['import { middleware } from "./nextlytics";', "", "export { middleware };"].join("\n"),
+  pagesRouter: {
+    label: "Pages Router",
+    files: [
+      {
+        filename: "pages/_app.tsx",
+        code: [
+          "import type { AppContext, AppProps } from 'next/app'",
+          "import {",
+          "  NextlyticsClient,",
+          "  getNextlyticsProps,",
+          "  type NextlyticsContext",
+          "} from '@nextlytics/core'",
+          "",
+          "type MyAppProps = AppProps & { nextlyticsCtx: NextlyticsContext }",
+          "",
+          "function MyApp({ Component, pageProps, nextlyticsCtx }: MyAppProps) {",
+          "  return (",
+          "    <NextlyticsClient ctx={nextlyticsCtx}>",
+          "      <Component {...pageProps} />",
+          "    </NextlyticsClient>",
+          "  )",
+          "}",
+          "",
+          "MyApp.getInitialProps = async (appContext: AppContext) => {",
+          "  return {",
+          "    pageProps: appContext.Component.getInitialProps",
+          "      ? await appContext.Component.getInitialProps(appContext.ctx)",
+          "      : {},",
+          "    nextlyticsCtx: getNextlyticsProps(appContext.ctx),",
+          "  }",
+          "}",
+          "",
+          "export default MyApp",
+        ].join("\n"),
+      },
+      {
+        filename: "src/middleware.ts",
+        code: ['import { middleware } from "./nextlytics";', "", "export { middleware };"].join(
+          "\n"
+        ),
+      },
+    ],
   },
 } as const;
 

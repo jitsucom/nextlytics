@@ -190,26 +190,41 @@ function HowItWorks() {
 
           {/* Step 3: Integrate */}
           <div className="bg-muted/50 rounded-xl border border-border overflow-hidden">
-            <div className="px-6 py-4 border-b border-border flex items-center gap-3">
-              <span className="w-7 h-7 rounded-full bg-primary text-primary-foreground text-sm font-medium flex items-center justify-center">
-                3
-              </span>
-              <span className="font-medium">Integrate with your app</span>
-            </div>
-            <div className="p-4 space-y-4">
-              {Object.values(integrationFiles).map((file) => (
-                <div
-                  key={file.filename}
-                  className="rounded-lg border border-border overflow-hidden bg-background"
-                >
-                  <div className="px-4 py-2.5 bg-muted border-b border-border flex items-center gap-2">
-                    <FileCode className="size-4 text-muted-foreground" />
-                    <span className="text-sm font-medium font-mono">{file.filename}</span>
-                  </div>
-                  <CodeBlock code={file.code} language="typescript" />
+            <Tabs defaultValue="appRouter">
+              <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="w-7 h-7 rounded-full bg-primary text-primary-foreground text-sm font-medium flex items-center justify-center">
+                    3
+                  </span>
+                  <span className="font-medium">Integrate with your app</span>
                 </div>
+                <TabsList>
+                  {Object.entries(integrationFiles).map(([key, config]) => (
+                    <TabsTrigger key={key} value={key}>
+                      {config.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+              {Object.entries(integrationFiles).map(([key, config]) => (
+                <TabsContent key={key} value={key} className="m-0">
+                  <div className="p-4 space-y-4">
+                    {config.files.map((file) => (
+                      <div
+                        key={file.filename}
+                        className="rounded-lg border border-border overflow-hidden bg-background"
+                      >
+                        <div className="px-4 py-2.5 bg-muted border-b border-border flex items-center gap-2">
+                          <FileCode className="size-4 text-muted-foreground" />
+                          <span className="text-sm font-medium font-mono">{file.filename}</span>
+                        </div>
+                        <CodeBlock code={file.code} language="typescript" />
+                      </div>
+                    ))}
+                  </div>
+                </TabsContent>
               ))}
-            </div>
+            </Tabs>
           </div>
         </div>
 

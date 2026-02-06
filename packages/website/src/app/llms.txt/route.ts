@@ -65,13 +65,17 @@ function generateLlmsTxt(): string {
   // Step 3: Integrate
   lines.push("### Step 3: Integrate with your app");
   lines.push("");
-  for (const file of Object.values(integrationFiles)) {
-    lines.push(`#### ${file.filename}`);
+  for (const router of Object.values(integrationFiles)) {
+    lines.push(`#### ${router.label}`);
     lines.push("");
-    lines.push("```typescript");
-    lines.push(file.code);
-    lines.push("```");
-    lines.push("");
+    for (const file of router.files) {
+      lines.push(`**${file.filename}**`);
+      lines.push("");
+      lines.push("```typescript");
+      lines.push(file.code);
+      lines.push("```");
+      lines.push("");
+    }
   }
   lines.push("That's it. Every page view is now tracked server-side.");
   lines.push("");
