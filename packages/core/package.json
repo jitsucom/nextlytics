@@ -8,129 +8,56 @@
     "url": "https://github.com/jitsucom/nextlytics",
     "directory": "packages/core"
   },
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "require": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.cjs"
-      }
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./client": {
-      "import": {
-        "types": "./dist/client.d.ts",
-        "default": "./dist/client.js"
-      },
-      "require": {
-        "types": "./dist/client.d.ts",
-        "default": "./dist/client.cjs"
-      }
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
     },
     "./server": {
-      "import": {
-        "types": "./dist/server.d.ts",
-        "default": "./dist/server.js"
-      },
-      "require": {
-        "types": "./dist/server.d.ts",
-        "default": "./dist/server.cjs"
-      }
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
     },
     "./backends/logging": {
-      "import": {
-        "types": "./dist/backends/logging.d.ts",
-        "default": "./dist/backends/logging.js"
-      },
-      "require": {
-        "types": "./dist/backends/logging.d.ts",
-        "default": "./dist/backends/logging.cjs"
-      }
+      "types": "./dist/backends/logging.d.ts",
+      "default": "./dist/backends/logging.js"
     },
     "./backends/posthog": {
-      "import": {
-        "types": "./dist/backends/posthog.d.ts",
-        "default": "./dist/backends/posthog.js"
-      },
-      "require": {
-        "types": "./dist/backends/posthog.d.ts",
-        "default": "./dist/backends/posthog.cjs"
-      }
+      "types": "./dist/backends/posthog.d.ts",
+      "default": "./dist/backends/posthog.js"
     },
     "./backends/neon": {
-      "import": {
-        "types": "./dist/backends/neon.d.ts",
-        "default": "./dist/backends/neon.js"
-      },
-      "require": {
-        "types": "./dist/backends/neon.d.ts",
-        "default": "./dist/backends/neon.cjs"
-      }
+      "types": "./dist/backends/neon.d.ts",
+      "default": "./dist/backends/neon.js"
     },
     "./backends/postgrest": {
-      "import": {
-        "types": "./dist/backends/postgrest.d.ts",
-        "default": "./dist/backends/postgrest.js"
-      },
-      "require": {
-        "types": "./dist/backends/postgrest.d.ts",
-        "default": "./dist/backends/postgrest.cjs"
-      }
+      "types": "./dist/backends/postgrest.d.ts",
+      "default": "./dist/backends/postgrest.js"
     },
     "./backends/segment": {
-      "import": {
-        "types": "./dist/backends/segment.d.ts",
-        "default": "./dist/backends/segment.js"
-      },
-      "require": {
-        "types": "./dist/backends/segment.d.ts",
-        "default": "./dist/backends/segment.cjs"
-      }
+      "types": "./dist/backends/segment.d.ts",
+      "default": "./dist/backends/segment.js"
     },
     "./backends/clickhouse": {
-      "import": {
-        "types": "./dist/backends/clickhouse.d.ts",
-        "default": "./dist/backends/clickhouse.js"
-      },
-      "require": {
-        "types": "./dist/backends/clickhouse.d.ts",
-        "default": "./dist/backends/clickhouse.cjs"
-      }
+      "types": "./dist/backends/clickhouse.d.ts",
+      "default": "./dist/backends/clickhouse.js"
     },
     "./backends/gtm": {
-      "import": {
-        "types": "./dist/backends/gtm.d.ts",
-        "default": "./dist/backends/gtm.js"
-      },
-      "require": {
-        "types": "./dist/backends/gtm.d.ts",
-        "default": "./dist/backends/gtm.cjs"
-      }
+      "types": "./dist/backends/gtm.d.ts",
+      "default": "./dist/backends/gtm.js"
     },
     "./backends/ga": {
-      "import": {
-        "types": "./dist/backends/ga.d.ts",
-        "default": "./dist/backends/ga.js"
-      },
-      "require": {
-        "types": "./dist/backends/ga.d.ts",
-        "default": "./dist/backends/ga.cjs"
-      }
+      "types": "./dist/backends/ga.d.ts",
+      "default": "./dist/backends/ga.js"
     },
     "./plugins/vercel-geo": {
-      "import": {
-        "types": "./dist/plugins/vercel-geo.d.ts",
-        "default": "./dist/plugins/vercel-geo.js"
-      },
-      "require": {
-        "types": "./dist/plugins/vercel-geo.d.ts",
-        "default": "./dist/plugins/vercel-geo.cjs"
-      }
+      "types": "./dist/plugins/vercel-geo.d.ts",
+      "default": "./dist/plugins/vercel-geo.js"
     }
   },
   "files": [

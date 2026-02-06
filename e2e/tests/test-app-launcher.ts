@@ -40,8 +40,9 @@ export class TestAppLauncher {
   }
 
   private setNextVersion(): void {
+    const templatePath = join(this.appDir, "package.template.json");
     const pkgPath = join(this.appDir, "package.json");
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+    const pkg = JSON.parse(readFileSync(templatePath, "utf-8"));
     pkg.dependencies.next = NEXT_VERSIONS[this.version];
     writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
   }

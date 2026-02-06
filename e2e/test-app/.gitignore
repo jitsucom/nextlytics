@@ -2,3 +2,7 @@ node_modules/
 .next/
 .env
 .env.local
+package.json
+package-lock.json
+tsconfig.json
+next-env.d.ts
