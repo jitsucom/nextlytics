@@ -1,0 +1,10 @@
+{
+  "packages": {
+    "packages/core": {
+      "release-type": "node",
+      "package-name": "@nextlytics/core"
+    }
+  },
+  "separate-pull-requests": true,
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
+}
