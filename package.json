@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "e2e"
   ],
   "scripts": {
     "verify": "bun run typecheck && bun run lint && bun run format:check && bun run test",
@@ -15,7 +16,8 @@
     "format:check": "prettier --check .",
     "website:dev": "bun --cwd packages/website dev",
     "website:start": "bun --cwd packages/website start",
-    "website:watch": "nodemon --watch packages/core/src --watch packages/website/src -e ts,tsx --exec 'bun run build && bun website:start'"
+    "website:watch": "nodemon --watch packages/core/src --watch packages/website/src -e ts,tsx --exec 'bun run build && bun website:start'",
+    "e2e": "bun --cwd e2e e2e"
   },
   "devDependencies": {
     "eslint": "^9.0.0",

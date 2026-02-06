@@ -30,6 +30,8 @@
 import type { NextlyticsBackend, NextlyticsEvent } from "../types";
 import { eventToJsonRow, extractClientContext, generatePgCreateTableSQL } from "./lib/db";
 
+export { generatePgCreateTableSQL, type AnalyticsEventRow } from "./lib/db";
+
 export type PostgrestBackendConfig = {
   /** PostgREST API URL (e.g., "https://xxx.supabase.co/rest/v1") */
   url: string;
@@ -85,15 +87,28 @@ export function postgrestBackend(config: PostgrestBackendConfig): NextlyticsBack
     },
 
     async updateEvent(eventId: string, patch: Partial<NextlyticsEvent>): Promise<void> {
-      if (!patch.clientContext) return;
-
-      const clientCtx = extractClientContext(patch.clientContext);
       const updates: Record<string, unknown> = {};
 
-      if (clientCtx.referer !== undefined) updates.referer = clientCtx.referer;
-      if (clientCtx.user_agent !== undefined) updates.user_agent = clientCtx.user_agent;
-      if (clientCtx.locale !== undefined) updates.locale = clientCtx.locale;
-      if (clientCtx.rest) updates.client_context = clientCtx.rest;
+      // Update client context fields
+      if (patch.clientContext) {
+        const clientCtx = extractClientContext(patch.clientContext);
+        if (clientCtx.referer !== undefined) updates.referer = clientCtx.referer;
+        if (clientCtx.user_agent !== undefined) updates.user_agent = clientCtx.user_agent;
+        if (clientCtx.locale !== undefined) updates.locale = clientCtx.locale;
+        if (clientCtx.rest) updates.client_context = clientCtx.rest;
+      }
+
+      // Update user context fields
+      if (patch.userContext) {
+        updates.user_id = patch.userContext.userId;
+        if (patch.userContext.traits?.email) updates.user_email = patch.userContext.traits.email;
+        if (patch.userContext.traits?.name) updates.user_name = patch.userContext.traits.name;
+      }
+
+      // Update anonymous user ID
+      if (patch.anonymousUserId) {
+        updates.anonymous_user_id = patch.anonymousUserId;
+      }
 
       if (Object.keys(updates).length === 0) return;
 

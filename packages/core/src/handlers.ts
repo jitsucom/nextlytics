@@ -2,12 +2,14 @@ import type { NextRequest } from "next/server";
 import { headers as analyticsHeaders } from "./server-component-context";
 import type {
   DispatchResult,
-  NextlyticsConfig,
   NextlyticsEvent,
   ClientContext,
   RequestContext,
+  UserContext,
 } from "./types";
 import { createServerContext, generateId } from "./uitils";
+import { resolveAnonymousUser } from "./anonymous-user";
+import type { NextlyticsConfigWithDefaults } from "./config-helpers";
 
 type AppRouteHandlers = Record<"GET" | "POST", (req: NextRequest) => Promise<Response>>;
 
@@ -18,8 +20,18 @@ function createRequestContext(request: NextRequest): RequestContext {
   };
 }
 
+async function getUserContext(
+  config: NextlyticsConfigWithDefaults,
+  ctx: RequestContext
+): Promise<UserContext | undefined> {
+  if (!config.callbacks.getUser) return undefined;
+  // Errors in getUser callback are intentionally not caught here.
+  // If your auth logic throws, it's likely a configuration issue that should surface.
+  return (await config.callbacks.getUser(ctx)) || undefined;
+}
+
 export function createHandlers(
-  config: NextlyticsConfig,
+  config: NextlyticsConfigWithDefaults,
   dispatchEvent: (event: NextlyticsEvent, ctx: RequestContext) => DispatchResult,
   updateEvent: (
     eventId: string,
@@ -55,13 +67,22 @@ export function createHandlers(
           serverContext.path = clientContext.path;
         }
 
+        const userContext = await getUserContext(config, ctx);
+        const { anonId: anonymousUserId } = await resolveAnonymousUser({
+          ctx,
+          serverContext,
+          config,
+        });
+
         if (config.pageViewMode === "client-init") {
           const event: NextlyticsEvent = {
             eventId: pageRenderId,
             type: "pageView",
             collectedAt: new Date().toISOString(),
+            anonymousUserId,
             serverContext,
             clientContext,
+            userContext,
             properties: {},
           };
           const { clientActions, completion } = dispatchEvent(event, ctx);
@@ -72,7 +93,7 @@ export function createHandlers(
           const scripts = actions.items.filter((i) => i.type === "script-template");
           return Response.json({ ok: true, scripts: scripts.length > 0 ? scripts : undefined });
         } else {
-          await updateEvent(pageRenderId, { clientContext }, ctx);
+          await updateEvent(pageRenderId, { clientContext, userContext, anonymousUserId }, ctx);
           return Response.json({ ok: true });
         }
       } else if (type === "client-event") {
@@ -82,13 +103,22 @@ export function createHandlers(
           serverContext.path = clientContext.path;
         }
 
+        const userContext = await getUserContext(config, ctx);
+        const { anonId: anonymousUserId } = await resolveAnonymousUser({
+          ctx,
+          serverContext,
+          config,
+        });
+
         const event: NextlyticsEvent = {
           eventId: generateId(),
           parentEventId: pageRenderId,
           type: (payload.name as string) || type,
           collectedAt: (payload.collectedAt as string) || new Date().toISOString(),
+          anonymousUserId,
           serverContext,
           clientContext,
+          userContext,
           properties: (payload.props as Record<string, unknown>) || {},
         };
         const { clientActions, completion } = dispatchEvent(event, ctx);
