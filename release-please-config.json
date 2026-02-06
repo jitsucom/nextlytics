@@ -2,7 +2,8 @@
   "packages": {
     "packages/core": {
       "release-type": "node",
-      "package-name": "@nextlytics/core"
+      "package-name": "@nextlytics/core",
+      "changelog-path": "../../CHANGELOG.md"
     }
   },
   "separate-pull-requests": true,
