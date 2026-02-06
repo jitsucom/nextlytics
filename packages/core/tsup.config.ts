@@ -6,4 +6,7 @@ export default defineConfig({
   dts: true,
   bundle: false,
   external: ["react", "next", "posthog-js", "@neondatabase/serverless"],
+  outExtension: ({ format }) => ({
+    js: format === "esm" ? ".js" : ".cjs",
+  }),
 });

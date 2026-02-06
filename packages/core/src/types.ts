@@ -137,7 +137,7 @@ export type NextlyticsConfig = {
   eventEndpoint?: string;
   callbacks: {
     /** Resolve authenticated user from request context */
-    getUser?: (ctx: RequestContext) => Promise<UserContext>;
+    getUser?: (ctx: RequestContext) => Promise<UserContext | undefined>;
     /** Override anonymous user ID generation */
     getAnonymousUserId?: (opts: {
       ctx: RequestContext;

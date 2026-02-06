@@ -155,3 +155,26 @@ export function generateChCreateTableSQL(database: string, tableName: string): s
 export function isChTableNotFoundError(text: string): boolean {
   return text.includes("UNKNOWN_TABLE") || text.includes("doesn't exist");
 }
+
+/** Row type returned from analytics table queries */
+export interface AnalyticsEventRow {
+  event_id: string;
+  parent_event_id: string | null;
+  timestamp: string;
+  type: string;
+  anonymous_user_id: string | null;
+  user_id: string | null;
+  user_email: string | null;
+  user_name: string | null;
+  host: string;
+  method: string;
+  path: string;
+  ip: string | null;
+  referer: string | null;
+  user_agent: string | null;
+  locale: string | null;
+  server_context: Record<string, unknown>;
+  client_context: Record<string, unknown>;
+  user_traits: Record<string, unknown>;
+  properties: Record<string, unknown>;
+}
