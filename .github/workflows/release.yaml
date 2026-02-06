@@ -37,14 +37,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      issues: write
-      pull-requests: write
       id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -61,8 +58,22 @@ jobs:
       - name: Build
         run: bun run build
 
-      - name: Release
+      - name: Set canary version
+        if: github.ref == 'refs/heads/main'
         working-directory: packages/core
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+        run: |
+          CURRENT=$(jq -r .version package.json)
+          BASE=${CURRENT%%-*}
+          CANARY="${BASE}-canary.$(git rev-list --count HEAD)"
+          jq --arg v "$CANARY" '.version = $v' package.json > tmp.json && mv tmp.json package.json
+          echo "Publishing $CANARY"
+
+      - name: Publish canary
+        if: github.ref == 'refs/heads/main'
+        working-directory: packages/core
+        run: npm publish --provenance --access public --tag canary
+
+      - name: Publish stable
+        if: github.ref == 'refs/heads/stable'
+        working-directory: packages/core
+        run: npm publish --provenance --access public
