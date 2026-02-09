@@ -30,7 +30,7 @@ jobs:
           key: playwright-${{ hashFiles('e2e/bun.lock') }}
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: bun playwright install --with-deps chromium
 
       - name: Build
         run: bun run build
