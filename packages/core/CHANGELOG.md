@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.2](https://github.com/jitsucom/nextlytics/compare/v0.2.1...v0.2.2) (2026-02-10)
+
+
+### Bug Fixes
+
+* **segment:** use batch endpoint for Jitsu compatibility ([452102f](https://github.com/jitsucom/nextlytics/commit/452102fe71ac6f47f527776097c2c48100169ab4))
+* **segment:** use batch endpoint with X-Write-Key header for Jitsu compatibility ([b7732c1](https://github.com/jitsucom/nextlytics/commit/b7732c1e8a833aa39c33f59567b3944e53fffb0d))
+
 ## [0.2.1](https://github.com/jitsucom/nextlytics/compare/v0.2.0...v0.2.1) (2026-02-10)
 
 
