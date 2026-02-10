@@ -117,7 +117,8 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
           .onEvent(event)
           .then((result) => ({ ok: true as const, ms: Date.now() - start, result }))
           .catch((err) => {
-            console.warn(`[Nextlytics] Backend "${backend.name}" failed on onEvent:`, err);
+            console.error(`[Nextlytics] Backend "${backend.name}" failed on onEvent:`, err);
+            if (err instanceof Error && err.stack) console.error(err.stack);
             return { ok: false as const, ms: Date.now() - start, result: undefined };
           });
         return { backend, promise };
@@ -165,7 +166,8 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
           await backend.updateEvent(eventId, patch);
           return { backend, ok: true as const, ms: Date.now() - start };
         } catch (err) {
-          console.warn(`[Nextlytics] Backend "${backend.name}" failed on updateEvent:`, err);
+          console.error(`[Nextlytics] Backend "${backend.name}" failed on updateEvent:`, err);
+          if (err instanceof Error && err.stack) console.error(err.stack);
           return { backend, ok: false as const, ms: Date.now() - start };
         }
       })

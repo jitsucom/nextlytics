@@ -32,7 +32,7 @@ export function neonBackend(config: NeonBackendConfig): NextlyticsBackend {
       const placeholders = tableColumns.map((_, i) => `$${i + 1}`).join(", ");
 
       try {
-        await sql(`INSERT INTO ${table} (${cols}) VALUES (${placeholders})`, [
+        await sql.query(`INSERT INTO ${table} (${cols}) VALUES (${placeholders})`, [
           ...tableColumns.map((c) => values[c.name]),
         ]);
       } catch (err) {
@@ -70,7 +70,10 @@ export function neonBackend(config: NeonBackendConfig): NextlyticsBackend {
 
       if (sets.length > 0) {
         params.push(eventId);
-        await sql(`UPDATE ${table} SET ${sets.join(", ")} WHERE event_id = $${paramIndex}`, params);
+        await sql.query(
+          `UPDATE ${table} SET ${sets.join(", ")} WHERE event_id = $${paramIndex}`,
+          params
+        );
       }
     },
   };
