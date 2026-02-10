@@ -38,16 +38,15 @@ export type SegmentBackendConfig = {
 
 export function segmentBackend(config: SegmentBackendConfig): NextlyticsBackend {
   const host = (config.host ?? "https://api.segment.io").replace(/\/$/, "");
-  const authHeader = "Basic " + btoa(config.writeKey + ":");
 
-  async function send(endpoint: string, payload: Record<string, unknown>) {
-    const res = await fetch(`${host}${endpoint}`, {
+  async function send(batch: Record<string, unknown>[]) {
+    const res = await fetch(`${host}/v1/batch`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: authHeader,
+        "X-Write-Key": config.writeKey,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ batch }),
     });
     if (!res.ok) {
       const text = await res.text();
@@ -104,26 +103,19 @@ export function segmentBackend(config: SegmentBackendConfig): NextlyticsBackend 
       const context = buildContext(event);
       const properties = buildProperties(event);
 
+      const basePayload = {
+        messageId: event.eventId,
+        anonymousId: event.anonymousUserId,
+        userId: event.userContext?.userId,
+        timestamp: event.collectedAt,
+        context,
+        properties,
+      };
+
       if (event.type === "pageView") {
-        await send("/v1/page", {
-          messageId: event.eventId,
-          anonymousId: event.anonymousUserId,
-          userId: event.userContext?.userId,
-          name: event.serverContext.path,
-          timestamp: event.collectedAt,
-          context,
-          properties,
-        });
+        await send([{ type: "page", name: event.serverContext.path, ...basePayload }]);
       } else {
-        await send("/v1/track", {
-          messageId: event.eventId,
-          anonymousId: event.anonymousUserId,
-          userId: event.userContext?.userId,
-          event: event.type,
-          timestamp: event.collectedAt,
-          context,
-          properties,
-        });
+        await send([{ type: "track", event: event.type, ...basePayload }]);
       }
     },
 
