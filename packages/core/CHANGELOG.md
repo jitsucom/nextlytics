@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/jitsucom/nextlytics/compare/v0.2.2...v0.3.0) (2026-02-10)
+
+
+### Features
+
+* **core:** add ingestPolicy for per-backend event timing control ([6f2f163](https://github.com/jitsucom/nextlytics/commit/6f2f163259da833ad54164dcf4799958aac3a49a))
+* **core:** add ingestPolicy for per-backend event timing control ([b77e9f9](https://github.com/jitsucom/nextlytics/commit/b77e9f9b9c98eaefb10f10bb80f161b1ab97bcf8))
+
 ## [0.2.2](https://github.com/jitsucom/nextlytics/compare/v0.2.1...v0.2.2) (2026-02-10)
 
 
