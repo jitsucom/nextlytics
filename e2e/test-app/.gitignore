@@ -4,5 +4,4 @@ node_modules/
 .env.local
 package.json
 package-lock.json
-tsconfig.json
 next-env.d.ts
