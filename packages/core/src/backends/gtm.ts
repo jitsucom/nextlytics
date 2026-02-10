@@ -47,18 +47,22 @@ export function googleTagManagerBackend(opts: GoogleTagManagerBackendOptions): N
       return {
         [GTM_INIT_TEMPLATE_ID]: {
           items: [
+            // GTM script loader - run once
             {
               body: [
                 "window.dataLayer = window.dataLayer || [];",
-                "dataLayer.push({{json(initialData)}});",
-                "if (!window.google_tag_manager || !window.google_tag_manager['{{containerId}}']) {",
-                "  (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':",
-                "  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],",
-                "  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=",
-                "  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);",
-                "  })(window,document,'script','dataLayer','{{containerId}}');",
-                "}",
+                "(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':",
+                "new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],",
+                "j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=",
+                "'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);",
+                "})(window,document,'script','dataLayer','{{containerId}}');",
               ].join("\n"),
+              mode: "once",
+            },
+            // Initial data push - run when params change (e.g., user logs in)
+            {
+              body: "dataLayer.push({{json(initialData)}});",
+              mode: "on-params-change",
             },
           ],
         },
@@ -69,6 +73,7 @@ export function googleTagManagerBackend(opts: GoogleTagManagerBackendOptions): N
                 "window.dataLayer = window.dataLayer || [];",
                 "dataLayer.push({{json(pageData)}});",
               ].join("\n"),
+              // default: "every-render"
             },
           ],
         },
@@ -79,6 +84,7 @@ export function googleTagManagerBackend(opts: GoogleTagManagerBackendOptions): N
                 "window.dataLayer = window.dataLayer || [];",
                 "dataLayer.push({{json(eventData)}});",
               ].join("\n"),
+              // default: "every-render"
             },
           ],
         },

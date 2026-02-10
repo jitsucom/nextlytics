@@ -199,12 +199,20 @@ export type JavascriptTemplate = {
   items: ScriptElement[];
 };
 
+/**
+ * Controls when a script runs during navigation:
+ * - "once": Run only on first mount (e.g., gtag.js, analytics init)
+ * - "on-params-change": Run when template params change (e.g., config with user_id)
+ * - "every-render": Run on every navigation (e.g., page_view events)
+ */
+export type ScriptMode = "once" | "on-params-change" | "every-render";
+
 export type ScriptElement = {
-  async?: string;
+  async?: boolean;
   body?: string;
   src?: string;
-  /** If true, skip insertion if script with same src already exists */
-  singleton?: boolean;
+  /** Controls when script runs. Default: "every-render" */
+  mode?: ScriptMode;
 };
 
 /** Backend that receives analytics events */

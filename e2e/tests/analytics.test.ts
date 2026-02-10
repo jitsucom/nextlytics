@@ -184,5 +184,85 @@ describe.each(versions)("%s", (version) => {
 
       await page.close();
     });
+
+    it("script modes work correctly during soft navigation", async () => {
+      // This test only applies to App Router (soft navigation with <Link>)
+      if (routerType !== "app") return;
+
+      const page = await testApp.newPage();
+
+      // Visit home page
+      await testApp.visitHome(page);
+      await page.waitForLoadState("networkidle");
+
+      // Wait for initial scripts to execute
+      await page.waitForFunction(() => window.__nextlyticsTestOnce !== undefined);
+
+      // Get initial counters
+      const initialCounters = await page.evaluate(() => ({
+        once: window.__nextlyticsTestOnce,
+        paramsChange: window.__nextlyticsTestParamsChange,
+        everyRender: window.__nextlyticsTestEveryRender,
+      }));
+
+      expect(initialCounters.once).toBe(1);
+      expect(initialCounters.paramsChange).toBe(1);
+      expect(initialCounters.everyRender).toBe(1);
+
+      // Soft navigate to test page using Link
+      await page.click('[data-testid="test-page-link"]');
+      await page.waitForLoadState("networkidle");
+      await page.waitForFunction(
+        (prev) => (window.__nextlyticsTestEveryRender ?? 0) > prev,
+        initialCounters.everyRender ?? 0
+      );
+
+      // Get counters after soft navigation
+      const afterNavCounters = await page.evaluate(() => ({
+        once: window.__nextlyticsTestOnce,
+        paramsChange: window.__nextlyticsTestParamsChange,
+        everyRender: window.__nextlyticsTestEveryRender,
+      }));
+
+      // "once" should still be 1 - not re-executed
+      expect(afterNavCounters.once).toBe(1);
+      // "on-params-change" should be 2 - path changed from "/" to "/test-page"
+      expect(afterNavCounters.paramsChange).toBe(2);
+      // "every-render" should be 2 - runs on every navigation
+      expect(afterNavCounters.everyRender).toBe(2);
+
+      // Navigate back to home
+      await page.click('[data-testid="home-link"]');
+      await page.waitForLoadState("networkidle");
+      await page.waitForFunction(
+        (prev) => (window.__nextlyticsTestEveryRender ?? 0) > prev,
+        afterNavCounters.everyRender ?? 0
+      );
+
+      // Get final counters
+      const finalCounters = await page.evaluate(() => ({
+        once: window.__nextlyticsTestOnce,
+        paramsChange: window.__nextlyticsTestParamsChange,
+        everyRender: window.__nextlyticsTestEveryRender,
+      }));
+
+      // "once" should still be 1
+      expect(finalCounters.once).toBe(1);
+      // "on-params-change" should be 3 - path changed again
+      expect(finalCounters.paramsChange).toBe(3);
+      // "every-render" should be 3
+      expect(finalCounters.everyRender).toBe(3);
+
+      await page.close();
+    });
   });
 });
+
+// Type augmentation for test globals
+declare global {
+  interface Window {
+    __nextlyticsTestOnce?: number;
+    __nextlyticsTestParamsChange?: number;
+    __nextlyticsTestEveryRender?: number;
+  }
+}

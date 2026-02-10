@@ -1,4 +1,5 @@
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 
 export default function PagesHome() {
   const { data: session } = useSession();
@@ -23,9 +24,9 @@ export default function PagesHome() {
         </div>
       )}
       <nav>
-        <a href="/pages-test" data-testid="test-page-link">
+        <Link href="/pages-test" data-testid="test-page-link">
           Test Page
-        </a>
+        </Link>
       </nav>
     </main>
   );

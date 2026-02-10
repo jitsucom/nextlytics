@@ -192,19 +192,30 @@ export function googleAnalyticsBackend(
         return {
           [GA_TEMPLATE_ID]: {
             items: [
+              // External gtag.js - load once
               {
-                async: "true",
                 src: "https://www.googletagmanager.com/gtag/js?id={{measurementId}}",
-                singleton: true,
+                async: true,
+                mode: "once",
               },
+              // gtag definition and initialization - run once
               {
                 body: [
                   "window.dataLayer = window.dataLayer || [];",
                   "function gtag(){dataLayer.push(arguments);}",
+                  "window.gtag = gtag;",
                   "gtag('js', new Date());",
-                  "gtag('config', '{{measurementId}}', {{json(config)}});",
-                  "gtag('event', 'page_view');",
                 ].join("\n"),
+                mode: "once",
+              },
+              // Config - run when params change (e.g., user_id added after login)
+              {
+                body: "gtag('config', '{{measurementId}}', {{json(config)}});",
+                mode: "on-params-change",
+              },
+              // Page view - run on every navigation
+              {
+                body: "gtag('event', 'page_view');",
               },
             ],
           },

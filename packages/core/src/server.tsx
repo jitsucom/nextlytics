@@ -102,7 +102,9 @@ export async function NextlyticsServer({ children }: { children: ReactNode }) {
   }
 
   return (
-    <NextlyticsClient requestId={ctx.pageRenderId} scripts={ctx.scripts} templates={ctx.templates}>
+    <NextlyticsClient
+      ctx={{ requestId: ctx.pageRenderId, scripts: ctx.scripts, templates: ctx.templates }}
+    >
       {children}
     </NextlyticsClient>
   );

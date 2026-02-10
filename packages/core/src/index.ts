@@ -19,4 +19,7 @@ export type {
   BackendConfigEntry,
   BackendWithConfig,
   IngestPolicy,
+  JavascriptTemplate,
+  ClientAction,
+  ScriptMode,
 } from "./types";
