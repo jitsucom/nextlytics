@@ -14,7 +14,10 @@ import {
 
 export type { AnalyticsEventRow };
 
-const INIT_SQL = generatePgCreateTableSQL("analytics");
+const INIT_SQL = [
+  generatePgCreateTableSQL("analytics"),
+  generatePgCreateTableSQL("analytics_delayed"),
+].join("\n");
 
 const PG_ALIAS = "postgres";
 
@@ -109,6 +112,7 @@ export class ThirdpartyServices {
 
   async clearAnalytics(): Promise<void> {
     await this.getPool().query("DELETE FROM analytics");
+    await this.getPool().query("DELETE FROM analytics_delayed");
   }
 
   async getAnalyticsEvents(): Promise<AnalyticsEventRow[]> {
@@ -122,6 +126,14 @@ export class ThirdpartyServices {
     const result = await this.getPool().query<AnalyticsEventRow>(
       "SELECT * FROM analytics WHERE path = $1 ORDER BY timestamp ASC",
       [path]
+    );
+    return result.rows;
+  }
+
+  /** Get events from the delayed (on-client-event) backend */
+  async getDelayedAnalyticsEvents(): Promise<AnalyticsEventRow[]> {
+    const result = await this.getPool().query<AnalyticsEventRow>(
+      "SELECT * FROM analytics_delayed ORDER BY timestamp ASC"
     );
     return result.rows;
   }

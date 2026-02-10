@@ -1,5 +1,5 @@
 import { Nextlytics } from "@nextlytics/core/server";
-import type { NextlyticsBackend, NextlyticsBackendFactory } from "@nextlytics/core";
+import type { BackendConfigEntry } from "@nextlytics/core";
 import { createDemoBackend } from "./lib/demo-backend";
 import { auth } from "./lib/auth";
 
@@ -11,8 +11,8 @@ import { postgrestBackend } from "@nextlytics/core/backends/postgrest";
 import { clickhouseBackend } from "@nextlytics/core/backends/clickhouse";
 import { posthogBackend } from "@nextlytics/core/backends/posthog";
 
-function buildBackends(): (NextlyticsBackend | NextlyticsBackendFactory)[] {
-  const backends: (NextlyticsBackend | NextlyticsBackendFactory)[] = [createDemoBackend()];
+function buildBackends(): BackendConfigEntry[] {
+  const backends: BackendConfigEntry[] = [createDemoBackend()];
 
   if (process.env.SEGMENT_WRITE_KEY) {
     backends.push(

@@ -26,6 +26,16 @@ export interface ClientContext {
   referer?: string;
   /** window.location.pathname - may differ from server path in SPAs */
   path?: string;
+  /** window.location.href */
+  url?: string;
+  /** window.location.host */
+  host?: string;
+  /** window.location.search (as string, e.g. "?foo=bar") */
+  search?: string;
+  /** window.location.hash */
+  hash?: string;
+  /** document.title */
+  title?: string;
   /** Screen and viewport dimensions */
   screen: {
     /** screen.width */
@@ -106,6 +116,23 @@ export type NextlyticsPlugin = {
 /** Factory to create plugin per-request (for request-scoped plugins) */
 export type NextlyticsPluginFactory = (ctx: RequestContext) => NextlyticsPlugin;
 
+/** When to ingest events for a backend */
+export type IngestPolicy =
+  /** Dispatch immediately in middleware (default) - faster but no client context */
+  | "immediate"
+  /** Dispatch when client-init is received - has full client context (title, screen, etc) */
+  | "on-client-event";
+
+/** Backend with configuration options */
+export type BackendWithConfig = {
+  backend: NextlyticsBackend | NextlyticsBackendFactory;
+  /** When to send events. Default: "immediate" */
+  ingestPolicy?: IngestPolicy;
+};
+
+/** Backend config entry - either a backend directly or with config */
+export type BackendConfigEntry = NextlyticsBackend | NextlyticsBackendFactory | BackendWithConfig;
+
 export type NextlyticsConfig = {
   /** Enable debug logging (shows backend stats for each event) */
   debug?: boolean;
@@ -121,12 +148,6 @@ export type NextlyticsConfig = {
     /** Cookie max age in seconds (default: 2 years) */
     cookieMaxAge?: number;
   };
-  /**
-   * When to record pageView:
-   * - "server": in middleware (default, more reliable)
-   * - "client-init": when JS loads (has client context) - NOT SUPPORTED CURRENTLU
-   */
-  pageViewMode?: "server" | "client-init";
   /** Skip tracking for API routes */
   excludeApiCalls?: boolean;
   /** Skip tracking for specific paths */
@@ -145,7 +166,7 @@ export type NextlyticsConfig = {
     }) => Promise<AnonymousUserResult>;
   };
   /** Analytics backends to send events to */
-  backends?: (NextlyticsBackend | NextlyticsBackendFactory)[];
+  backends?: BackendConfigEntry[];
 
   plugins?: (NextlyticsPlugin | NextlyticsPluginFactory)[];
 };

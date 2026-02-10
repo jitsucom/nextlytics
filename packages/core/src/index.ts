@@ -16,4 +16,7 @@ export type {
   UserContext,
   RequestContext,
   AnonymousUserResult,
+  BackendConfigEntry,
+  BackendWithConfig,
+  IngestPolicy,
 } from "./types";

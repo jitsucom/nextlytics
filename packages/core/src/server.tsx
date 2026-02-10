@@ -8,9 +8,12 @@ import {
 import { resolveAnonymousUser } from "./anonymous-user";
 import { NextlyticsClient } from "./client";
 import type {
+  BackendWithConfig,
   ClientAction,
   DispatchResult,
+  IngestPolicy,
   NextlyticsBackend,
+  NextlyticsBackendFactory,
   NextlyticsConfig,
   NextlyticsEvent,
   NextlyticsPlugin,
@@ -23,16 +26,34 @@ import { logConfigWarnings, validateConfig, withDefaults } from "./config-helper
 import { createNextlyticsMiddleware } from "./middleware";
 import { generateId } from "./uitils";
 
-function resolveBackends(config: NextlyticsConfig, ctx: RequestContext): NextlyticsBackend[] {
-  const backends = config.backends || [];
-  return backends
-    .map((backend) => {
-      if (typeof backend === "function") {
-        return backend(ctx);
+type ResolvedBackend = {
+  backend: NextlyticsBackend;
+  ingestPolicy: IngestPolicy;
+};
+
+function isBackendWithConfig(entry: unknown): entry is BackendWithConfig {
+  return typeof entry === "object" && entry !== null && "backend" in entry;
+}
+
+function resolveBackends(
+  config: NextlyticsConfig,
+  ctx: RequestContext,
+  policyFilter?: IngestPolicy
+): ResolvedBackend[] {
+  const entries = config.backends || [];
+  return entries
+    .map((entry): ResolvedBackend | null => {
+      if (isBackendWithConfig(entry)) {
+        const backend = typeof entry.backend === "function" ? entry.backend(ctx) : entry.backend;
+        return backend ? { backend, ingestPolicy: entry.ingestPolicy ?? "immediate" } : null;
       }
-      return backend;
+      // Plain backend or factory - default to immediate
+      const backend =
+        typeof entry === "function" ? (entry as NextlyticsBackendFactory)(ctx) : entry;
+      return backend ? { backend, ingestPolicy: "immediate" } : null;
     })
-    .filter((b): b is NextlyticsBackend => b !== null);
+    .filter((b): b is ResolvedBackend => b !== null)
+    .filter((b) => !policyFilter || b.ingestPolicy === policyFilter);
 }
 
 function resolvePlugins(config: NextlyticsConfig, ctx: RequestContext): NextlyticsPlugin[] {
@@ -94,9 +115,13 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
   const validationResult = validateConfig(config);
   logConfigWarnings(validationResult);
 
-  const dispatchEventInternal = (event: NextlyticsEvent, ctx: RequestContext): DispatchResult => {
+  const dispatchEventInternal = (
+    event: NextlyticsEvent,
+    ctx: RequestContext,
+    policyFilter?: IngestPolicy
+  ): DispatchResult => {
     const plugins = resolvePlugins(config, ctx);
-    const backends = resolveBackends(config, ctx);
+    const resolved = resolveBackends(config, ctx, policyFilter);
 
     // Run plugins first (they can mutate the event)
     const pluginsDone = (async () => {
@@ -111,7 +136,7 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
 
     // After plugins, start all backends and store their promises
     const backendResults = pluginsDone.then(() => {
-      return backends.map((backend) => {
+      return resolved.map(({ backend }) => {
         const start = Date.now();
         const promise = backend
           .onEvent(event)
@@ -137,7 +162,7 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
       .then(async (results) => {
         const settled = await Promise.all(results.map((r) => r.promise));
         if (config.debug) {
-          const nameWidth = Math.max(...results.map((r) => r.backend.name.length));
+          const nameWidth = Math.max(...results.map((r) => r.backend.name.length), 1);
           console.log(
             `[Nextlytics] dispatchEvent ${event.type} ${event.eventId} (${results.length} backends)`
           );
@@ -158,9 +183,12 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     patch: Partial<NextlyticsEvent>,
     ctx: RequestContext
   ): Promise<void> => {
-    const backends = resolveBackends(config, ctx).filter((backend) => backend.supportsUpdates);
+    // Only update "immediate" backends that support updates
+    const resolved = resolveBackends(config, ctx, "immediate").filter(
+      ({ backend }) => backend.supportsUpdates
+    );
     const results = await Promise.all(
-      backends.map(async (backend) => {
+      resolved.map(async ({ backend }) => {
         const start = Date.now();
         try {
           await backend.updateEvent(eventId, patch);
@@ -172,9 +200,9 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
         }
       })
     );
-    if (config.debug && backends.length > 0) {
-      const nameWidth = Math.max(...backends.map((b) => b.name.length));
-      console.log(`[Nextlytics] updateEvent ${eventId} (${backends.length} backends)`);
+    if (config.debug && resolved.length > 0) {
+      const nameWidth = Math.max(...resolved.map(({ backend }) => backend.name.length));
+      console.log(`[Nextlytics] updateEvent ${eventId} (${resolved.length} backends)`);
       results.forEach((r) => {
         const status = r.ok ? "ok" : "fail";
         console.log(`  ${r.backend.name.padEnd(nameWidth)}  ${status.padEnd(4)}  ${r.ms}ms`);
@@ -193,7 +221,7 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
   };
 
   const middleware = createNextlyticsMiddleware(config, dispatchEventInternal, updateEventInternal);
-  const handlers = createHandlers(config, dispatchEventInternal, updateEventInternal);
+  const handlers = createHandlers();
 
   const analytics = async () => {
     const headersList = await headers();
