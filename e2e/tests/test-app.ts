@@ -84,6 +84,25 @@ export class TestApp {
     throw new Error(`Timed out waiting for analytics events after ${timeout}ms`);
   }
 
+  /** Get events from the delayed (on-client-event) backend */
+  async getDelayedAnalyticsEvents(): Promise<AnalyticsEventRow[]> {
+    return this.services.getDelayedAnalyticsEvents();
+  }
+
+  /** Poll until delayed events match the predicate */
+  async waitForDelayedEvents(
+    predicate: (events: AnalyticsEventRow[]) => boolean,
+    { timeout = 5000, interval = 100 } = {}
+  ): Promise<AnalyticsEventRow[]> {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      const events = await this.getDelayedAnalyticsEvents();
+      if (predicate(events)) return events;
+      await new Promise((r) => setTimeout(r, interval));
+    }
+    throw new Error(`Timed out waiting for delayed analytics events after ${timeout}ms`);
+  }
+
   // Test action helpers
   async login(page: Page): Promise<void> {
     await page.goto(`${this.baseUrl}${this.loginPath}`);

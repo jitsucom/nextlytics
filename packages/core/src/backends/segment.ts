@@ -54,6 +54,36 @@ export function segmentBackend(config: SegmentBackendConfig): NextlyticsBackend 
     }
   }
 
+  function buildUrl(event: NextlyticsEvent): string {
+    // Prefer client-provided URL if available
+    if (event.clientContext?.url) return event.clientContext.url;
+
+    const { host, path, search } = event.serverContext;
+    const protocol = host.includes("localhost") || host.match(/^[\d.:]+$/) ? "http" : "https";
+    const searchStr = Object.entries(search)
+      .flatMap(([k, vals]) => vals.map((v) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`))
+      .join("&");
+    return `${protocol}://${host}${path}${searchStr ? `?${searchStr}` : ""}`;
+  }
+
+  function getSearchString(event: NextlyticsEvent): string {
+    // Prefer client-provided search if available
+    if (event.clientContext?.search) return event.clientContext.search;
+
+    return Object.entries(event.serverContext.search)
+      .flatMap(([k, vals]) => vals.map((v) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`))
+      .join("&");
+  }
+
+  function getReferringDomain(referer?: string): string | undefined {
+    if (!referer) return undefined;
+    try {
+      return new URL(referer).hostname;
+    } catch {
+      return undefined;
+    }
+  }
+
   function buildContext(event: NextlyticsEvent) {
     const ctx: Record<string, unknown> = {
       ip: event.serverContext.ip,
@@ -63,20 +93,29 @@ export function segmentBackend(config: SegmentBackendConfig): NextlyticsBackend 
       ctx.traits = event.userContext.traits;
     }
 
-    if (event.clientContext) {
-      ctx.userAgent = event.clientContext.userAgent;
-      ctx.locale = event.clientContext.locale;
-      ctx.page = {
-        path: event.clientContext.path,
-        referrer: event.clientContext.referer,
-      };
-      if (event.clientContext.screen) {
+    const cc = event.clientContext;
+    const sc = event.serverContext;
+
+    ctx.page = {
+      path: cc?.path ?? sc.path,
+      referrer: cc?.referer,
+      referring_domain: getReferringDomain(cc?.referer),
+      host: cc?.host ?? sc.host,
+      search: getSearchString(event),
+      title: cc?.title,
+      url: buildUrl(event),
+    };
+
+    if (cc) {
+      ctx.userAgent = cc.userAgent;
+      ctx.locale = cc.locale;
+      if (cc.screen) {
         ctx.screen = {
-          width: event.clientContext.screen.width,
-          height: event.clientContext.screen.height,
-          innerWidth: event.clientContext.screen.innerWidth,
-          innerHeight: event.clientContext.screen.innerHeight,
-          density: event.clientContext.screen.density,
+          width: cc.screen.width,
+          height: cc.screen.height,
+          innerWidth: cc.screen.innerWidth,
+          innerHeight: cc.screen.innerHeight,
+          density: cc.screen.density,
         };
       }
     }
@@ -85,12 +124,19 @@ export function segmentBackend(config: SegmentBackendConfig): NextlyticsBackend 
   }
 
   function buildProperties(event: NextlyticsEvent) {
+    const cc = event.clientContext;
+    const sc = event.serverContext;
+
     return {
       parentEventId: event.parentEventId,
-      path: event.serverContext.path,
-      host: event.serverContext.host,
-      method: event.serverContext.method,
-      search: event.serverContext.search,
+      path: cc?.path ?? sc.path,
+      url: buildUrl(event),
+      search: getSearchString(event),
+      hash: cc?.hash,
+      title: cc?.title,
+      referrer: cc?.referer,
+      width: cc?.screen?.innerWidth,
+      height: cc?.screen?.innerHeight,
       ...event.properties,
     };
   }

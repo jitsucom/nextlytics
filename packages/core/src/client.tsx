@@ -32,6 +32,11 @@ function createClientContext(): ClientContext {
     collectedAt: new Date(),
     referer: isBrowser ? document.referrer || undefined : undefined,
     path: isBrowser ? window.location.pathname : undefined,
+    url: isBrowser ? window.location.href : undefined,
+    host: isBrowser ? window.location.host : undefined,
+    search: isBrowser ? window.location.search : undefined,
+    hash: isBrowser ? window.location.hash : undefined,
+    title: isBrowser ? document.title : undefined,
     screen: {
       width: isBrowser ? window.screen.width : undefined,
       height: isBrowser ? window.screen.height : undefined,

@@ -139,5 +139,50 @@ describe.each(versions)("%s", (version) => {
 
       await page.close();
     });
+
+    it("on-client-event backend receives events with full client context", async () => {
+      const page = await testApp.newPage();
+
+      await testApp.visitHome(page);
+
+      // Wait for events in both backends
+      const [immediateEvents, delayedEvents] = await Promise.all([
+        testApp.waitForEvents((e) =>
+          e.some((ev) => ev.type === "pageView" && ev.path === testApp.homePath)
+        ),
+        testApp.waitForDelayedEvents((e) =>
+          e.some((ev) => ev.type === "pageView" && ev.path === testApp.homePath)
+        ),
+      ]);
+
+      const immediatePageView = immediateEvents.find(
+        (e) => e.type === "pageView" && e.path === testApp.homePath
+      );
+      const delayedPageView = delayedEvents.find(
+        (e) => e.type === "pageView" && e.path === testApp.homePath
+      );
+
+      expect(immediatePageView).toBeDefined();
+      expect(delayedPageView).toBeDefined();
+
+      // Both should have the same event_id
+      expect(delayedPageView!.event_id).toBe(immediatePageView!.event_id);
+
+      // Delayed backend should have client_context with screen info
+      const delayedClientCtx = delayedPageView!.client_context as Record<string, unknown>;
+      expect(delayedClientCtx).toBeDefined();
+      expect(delayedClientCtx.screen).toBeDefined();
+
+      const screen = delayedClientCtx.screen as Record<string, unknown>;
+      expect(screen.width).toBeGreaterThan(0);
+      expect(screen.height).toBeGreaterThan(0);
+      expect(screen.innerWidth).toBeGreaterThan(0);
+      expect(screen.innerHeight).toBeGreaterThan(0);
+
+      // Delayed backend should have title (from document.title)
+      expect(delayedClientCtx.title).toBeDefined();
+
+      await page.close();
+    });
   });
 });

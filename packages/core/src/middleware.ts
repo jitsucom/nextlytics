@@ -5,10 +5,13 @@ import {
   serializeServerComponentContext,
 } from "./server-component-context";
 import type {
+  BackendWithConfig,
   ClientContext,
   DispatchResult,
+  IngestPolicy,
   JavascriptTemplate,
   NextlyticsBackend,
+  NextlyticsBackendFactory,
   NextlyticsEvent,
   RequestContext,
   ServerEventContext,
@@ -19,28 +22,50 @@ import type { NextlyticsConfigWithDefaults } from "./config-helpers";
 import { generateId, getRequestInfo, createServerContext } from "./uitils";
 import { resolveAnonymousUser } from "./anonymous-user";
 
-type DispatchEvent = (event: NextlyticsEvent, ctx: RequestContext) => DispatchResult;
+type DispatchEvent = (
+  event: NextlyticsEvent,
+  ctx: RequestContext,
+  policyFilter?: IngestPolicy
+) => DispatchResult;
 type UpdateEvent = (
   eventId: string,
   patch: Partial<NextlyticsEvent>,
   ctx: RequestContext
 ) => Promise<void>;
 
-/** Resolve backend factories to actual backends */
+type ResolvedBackend = {
+  backend: NextlyticsBackend;
+  ingestPolicy: IngestPolicy;
+};
+
+function isBackendWithConfig(entry: unknown): entry is BackendWithConfig {
+  return typeof entry === "object" && entry !== null && "backend" in entry;
+}
+
+/** Resolve backend factories to actual backends with their policies */
 function resolveBackends(
   config: NextlyticsConfigWithDefaults,
   ctx: RequestContext
-): NextlyticsBackend[] {
-  const backends = config.backends || [];
-  return backends
-    .map((backend) => (typeof backend === "function" ? backend(ctx) : backend))
-    .filter((b): b is NextlyticsBackend => b !== null);
+): ResolvedBackend[] {
+  const entries = config.backends || [];
+  return entries
+    .map((entry): ResolvedBackend | null => {
+      if (isBackendWithConfig(entry)) {
+        const backend = typeof entry.backend === "function" ? entry.backend(ctx) : entry.backend;
+        return backend ? { backend, ingestPolicy: entry.ingestPolicy ?? "immediate" } : null;
+      }
+      // Plain backend or factory - default to immediate
+      const backend =
+        typeof entry === "function" ? (entry as NextlyticsBackendFactory)(ctx) : entry;
+      return backend ? { backend, ingestPolicy: "immediate" } : null;
+    })
+    .filter((b): b is ResolvedBackend => b !== null);
 }
 
 /** Collect script templates from all backends */
-function collectTemplates(backends: NextlyticsBackend[]): Record<string, JavascriptTemplate> {
+function collectTemplates(backends: ResolvedBackend[]): Record<string, JavascriptTemplate> {
   const templates: Record<string, JavascriptTemplate> = {};
-  for (const backend of backends) {
+  for (const { backend } of backends) {
     if (backend.getClientSideTemplates) {
       Object.assign(templates, backend.getClientSideTemplates());
     }
@@ -91,57 +116,51 @@ export function createNextlyticsMiddleware(
     const backends = resolveBackends(config, ctx);
     const templates = collectTemplates(backends);
 
-    // Prepare scripts (will be populated if pageView is dispatched)
-    let scripts: TemplatizedScriptInsertion<unknown>[] = [];
-
-    // Only dispatch page view on server if pageViewMode is "server" (default)
-    if (config.pageViewMode !== "client-init") {
-      // Check if path should be excluded
-      if (config.excludePaths?.(pathname)) {
-        serializeServerComponentContext(response, {
-          pageRenderId,
-          pathname: request.nextUrl.pathname,
-          search: request.nextUrl.search,
-          scripts,
-          templates,
-        });
-        return response;
-      }
-
-      // Check if API calls should be excluded
-      const isApiPath = config.isApiPath(pathname);
-      if (isApiPath && config.excludeApiCalls) {
-        serializeServerComponentContext(response, {
-          pageRenderId,
-          pathname: request.nextUrl.pathname,
-          search: request.nextUrl.search,
-          scripts,
-          templates,
-        });
-        return response;
-      }
-
-      const userContext = await getUserContext(config, ctx);
-      const pageViewEvent = createPageViewEvent(
+    // Check if path should be excluded
+    if (config.excludePaths?.(pathname)) {
+      serializeServerComponentContext(response, {
         pageRenderId,
-        serverContext,
-        isApiPath,
-        userContext,
-        anonId
-      );
-
-      // Two-phase dispatch: get clientActions fast, defer completion
-      const { clientActions, completion } = dispatchEvent(pageViewEvent, ctx);
-      const actions = await clientActions;
-
-      // Extract script-template actions
-      scripts = actions.items.filter(
-        (i): i is TemplatizedScriptInsertion<unknown> => i.type === "script-template"
-      );
-
-      // Defer full completion to after response
-      after(() => completion);
+        pathname: request.nextUrl.pathname,
+        search: request.nextUrl.search,
+        scripts: [],
+        templates,
+      });
+      return response;
     }
+
+    // Check if API calls should be excluded
+    const isApiPath = config.isApiPath(pathname);
+    if (isApiPath && config.excludeApiCalls) {
+      serializeServerComponentContext(response, {
+        pageRenderId,
+        pathname: request.nextUrl.pathname,
+        search: request.nextUrl.search,
+        scripts: [],
+        templates,
+      });
+      return response;
+    }
+
+    const userContext = await getUserContext(config, ctx);
+    const pageViewEvent = createPageViewEvent(
+      pageRenderId,
+      serverContext,
+      isApiPath,
+      userContext,
+      anonId
+    );
+
+    // Dispatch to "immediate" backends only - "on-client-event" backends dispatch later
+    const { clientActions, completion } = dispatchEvent(pageViewEvent, ctx, "immediate");
+    const actions = await clientActions;
+
+    // Extract script-template actions
+    const scripts = actions.items.filter(
+      (i): i is TemplatizedScriptInsertion<unknown> => i.type === "script-template"
+    );
+
+    // Defer full completion to after response
+    after(() => completion);
 
     // Serialize context to headers
     serializeServerComponentContext(response, {
@@ -187,6 +206,37 @@ async function getUserContext(
   }
 }
 
+type ClientInitPayload = ClientContext;
+
+/**
+ * Reconstruct proper ServerEventContext from /api/event request + client data.
+ * The /api/event call has its own server context (pointing to /api/event),
+ * but we need to reconstruct the original page's context using client data.
+ */
+function reconstructServerContext(
+  apiCallContext: ServerEventContext,
+  clientInit: ClientInitPayload
+): ServerEventContext {
+  // Parse search params from client's search string
+  const searchParams: Record<string, string[]> = {};
+  if (clientInit.search) {
+    const params = new URLSearchParams(clientInit.search);
+    params.forEach((value, key) => {
+      if (!searchParams[key]) searchParams[key] = [];
+      searchParams[key].push(value);
+    });
+  }
+
+  return {
+    ...apiCallContext,
+    // Override with client-provided values
+    host: clientInit.host || apiCallContext.host,
+    path: clientInit.path || apiCallContext.path,
+    search: Object.keys(searchParams).length > 0 ? searchParams : apiCallContext.search,
+    method: "GET", // Page loads are always GET
+  };
+}
+
 async function handleEventPost(
   request: NextRequest,
   config: NextlyticsConfigWithDefaults,
@@ -208,46 +258,51 @@ async function handleEventPost(
   const { type, payload } = body;
 
   const ctx = createRequestContext(request);
-  const serverContext = createServerContext(request);
+  const apiCallServerContext = createServerContext(request);
   const userContext = await getUserContext(config, ctx);
-  const { anonId: anonymousUserId } = await resolveAnonymousUser({ ctx, serverContext, config });
 
   if (type === "client-init") {
-    const clientContext = payload as unknown as ClientContext;
-    if (clientContext?.path) {
-      serverContext.path = clientContext.path;
-    }
+    const clientContext = payload as unknown as ClientInitPayload;
+    const serverContext = reconstructServerContext(apiCallServerContext, clientContext);
 
-    if (config.pageViewMode === "client-init") {
-      // pageView wasn't dispatched in middleware, create it now
-      const event: NextlyticsEvent = {
-        eventId: pageRenderId,
-        type: "pageView",
-        collectedAt: new Date().toISOString(),
-        anonymousUserId,
-        serverContext,
-        clientContext,
-        userContext,
-        properties: {},
-      };
-      const { clientActions, completion } = dispatchEvent(event, ctx);
-      const actions = await clientActions;
-      after(() => completion);
-      // Filter to script-template only
-      const scripts = actions.items.filter((i) => i.type === "script-template");
-      return Response.json({ ok: true, scripts: scripts.length > 0 ? scripts : undefined });
-    } else {
-      // pageView was already dispatched, update with client context
-      after(() => updateEvent(pageRenderId, { clientContext, userContext, anonymousUserId }, ctx));
-      return Response.json({ ok: true });
-    }
+    const { anonId: anonymousUserId } = await resolveAnonymousUser({
+      ctx,
+      serverContext,
+      config,
+    });
+
+    // Dispatch to "on-client-event" backends (they didn't get the pageView in middleware)
+    const event: NextlyticsEvent = {
+      eventId: pageRenderId,
+      type: "pageView",
+      collectedAt: new Date().toISOString(),
+      anonymousUserId,
+      serverContext,
+      clientContext,
+      userContext,
+      properties: {},
+    };
+    const { clientActions, completion } = dispatchEvent(event, ctx, "on-client-event");
+    const actions = await clientActions;
+    after(() => completion);
+
+    // Also update "immediate" backends with client context
+    after(() => updateEvent(pageRenderId, { clientContext, userContext, anonymousUserId }, ctx));
+
+    // Filter to script-template only
+    const scripts = actions.items.filter((i) => i.type === "script-template");
+    return Response.json({ ok: true, scripts: scripts.length > 0 ? scripts : undefined });
   } else if (type === "client-event") {
     const clientContext = (payload.clientContext as ClientContext) || undefined;
+    const serverContext = clientContext
+      ? reconstructServerContext(apiCallServerContext, clientContext)
+      : apiCallServerContext;
 
-    // Override server path with client path if available (for SPA navigation)
-    if (clientContext?.path) {
-      serverContext.path = clientContext.path;
-    }
+    const { anonId: anonymousUserId } = await resolveAnonymousUser({
+      ctx,
+      serverContext,
+      config,
+    });
 
     const event: NextlyticsEvent = {
       eventId: generateId(),
@@ -260,6 +315,7 @@ async function handleEventPost(
       userContext,
       properties: (payload.props as Record<string, unknown>) || {},
     };
+    // Client events go to all backends
     const { clientActions, completion } = dispatchEvent(event, ctx);
     const actions = await clientActions;
     after(() => completion);
