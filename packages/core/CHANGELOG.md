@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.1](https://github.com/jitsucom/nextlytics/compare/v0.2.0...v0.2.1) (2026-02-10)
+
+
+### Bug Fixes
+
+* **neon:** use sql.query() for @neondatabase/serverless 1.x ([2121e90](https://github.com/jitsucom/nextlytics/commit/2121e908d3779eef8deecb62d08d5836c6e6a6e8))
+* **neon:** use sql.query() for @neondatabase/serverless 1.x ([2610419](https://github.com/jitsucom/nextlytics/commit/26104190eb8126a9395a9ac360d1533bd18c90f7)), closes [#18](https://github.com/jitsucom/nextlytics/issues/18)
+* release-please changelog path and add automerge workflow ([#16](https://github.com/jitsucom/nextlytics/issues/16)) ([a17dbaa](https://github.com/jitsucom/nextlytics/commit/a17dbaa7e91addb6c4d50d2f8a4872ef3653c411))
+* use CJS-only build for Next.js 15 compatibility ([f0d4b47](https://github.com/jitsucom/nextlytics/commit/f0d4b474cc62c66ce200b417f937b581caf1a4cb))
+
 ## [0.2.0](https://github.com/jitsucom/nextlytics/compare/core-v0.1.0...core-v0.2.0) (2026-02-06)
 
 
