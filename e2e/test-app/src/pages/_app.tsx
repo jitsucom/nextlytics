@@ -1,7 +1,7 @@
 import type { AppContext, AppProps } from "next/app";
 import { NextlyticsClient, type NextlyticsContext } from "@nextlytics/core/client";
+import { getNextlyticsProps } from "@nextlytics/core";
 import { SessionProvider } from "next-auth/react";
-import { getNextlyticsProps } from "@/nextlytics";
 
 type MyAppProps = AppProps & { nextlyticsCtx: NextlyticsContext };
 

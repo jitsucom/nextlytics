@@ -25,7 +25,6 @@ import type {
 import { logConfigWarnings, validateConfig, withDefaults } from "./config-helpers";
 import { createNextlyticsMiddleware } from "./middleware";
 import { generateId } from "./uitils";
-import { createGetNextlyticsProps } from "./pages-router";
 
 type ResolvedBackend = {
   backend: NextlyticsBackend;
@@ -301,16 +300,12 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     };
   };
 
-  // Pages Router helper with config captured in closure
-  const getNextlyticsProps = createGetNextlyticsProps(config);
-
   return {
     middleware,
     analytics,
     dispatchEvent,
     updateEvent,
     Server,
-    getNextlyticsProps,
   };
 }
 

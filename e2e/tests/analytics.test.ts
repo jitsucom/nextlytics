@@ -92,10 +92,11 @@ describe.each(versions)("%s", (version) => {
       await page.waitForLoadState("networkidle");
 
       const events = await testApp.waitForEvents(
-        (e) => e.filter((ev) => ev.type === "pageView").length >= 2
+        (e) => e.filter((ev) => ev.type === "pageView").length === 2
       );
       const pageViews = events.filter((e) => e.type === "pageView");
 
+      expect(pageViews.length).toBe(2);
       const paths = pageViews.map((e) => e.path);
       expect(paths).toContain(testApp.homePath);
       expect(paths).toContain(testApp.testPagePath);
@@ -130,10 +131,11 @@ describe.each(versions)("%s", (version) => {
       await testApp.visitTestPage(page);
 
       const events = await testApp.waitForEvents(
-        (e) => e.filter((ev) => ev.type === "pageView").length >= 2
+        (e) => e.filter((ev) => ev.type === "pageView").length === 2
       );
       const pageViews = events.filter((e) => e.type === "pageView");
 
+      expect(pageViews.length).toBe(2);
       const anonIds = new Set(pageViews.map((e) => e.anonymous_user_id));
       expect(anonIds.size).toBe(1);
 

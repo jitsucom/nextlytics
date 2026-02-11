@@ -1,4 +1,5 @@
 export { Nextlytics, NextlyticsServer } from "./server";
+export { getNextlyticsProps } from "./pages-router";
 export { NextlyticsClient, useNextlytics, type NextlyticsContext } from "./client";
 export { loggingBackend } from "./backends/logging";
 export type {

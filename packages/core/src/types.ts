@@ -260,8 +260,12 @@ export type NextlyticsClientContext = {
 
 /** Client-to-server request types (discriminated union) */
 export type ClientRequest =
-  | { type: "client-init"; clientContext: ClientContext }
-  | { type: "soft-navigation"; clientContext: ClientContext }
+  | {
+      type: "client-init";
+      clientContext: ClientContext;
+      /** If true, only update existing event (soft navigation - no dispatch, no scripts) */
+      softNavigation?: boolean;
+    }
   | {
       type: "client-event";
       name: string;
@@ -282,6 +286,4 @@ export type NextlyticsResult = {
   updateEvent: (eventId: string, patch: Partial<NextlyticsEvent>) => Promise<void>;
   /** Server component that wraps your app to provide analytics context (App Router) */
   Server: (props: { children: React.ReactNode }) => Promise<React.ReactElement>;
-  /** Extract context for NextlyticsClient in Pages Router _app.tsx */
-  getNextlyticsProps: (ctx: PagesRouterContext) => NextlyticsClientContext;
 };

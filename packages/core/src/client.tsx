@@ -214,7 +214,8 @@ type SendEventResult = {
 
 async function sendEventToServer(
   requestId: string,
-  request: ClientRequest
+  request: ClientRequest,
+  { signal }: { signal?: AbortSignal } = {}
 ): Promise<SendEventResult> {
   try {
     const response = await fetch("/api/event", {
@@ -224,6 +225,7 @@ async function sendEventToServer(
         [headers.pageRenderId]: requestId,
       },
       body: JSON.stringify(request),
+      signal,
     });
 
     if (response.status === 404) {
@@ -237,6 +239,9 @@ async function sendEventToServer(
     const data = await response.json().catch(() => ({ ok: response.ok }));
     return { ok: data.ok ?? response.ok, scripts: data.scripts };
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return { ok: false }; // Silently handle abort
+    }
     console.error("[Nextlytics] Failed to send event:", error);
     return { ok: false };
   }
@@ -275,7 +280,7 @@ export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: Rea
     });
   }, [requestId, addScripts]); // pathname captured once on mount
 
-  // Detect soft navigation and fetch scripts for new page
+  // Detect soft navigation and update event with client context
   useEffect(() => {
     // Skip if this is the initial render or same path
     if (initialPathRef.current === null || pathname === lastPathRef.current) {
@@ -283,10 +288,18 @@ export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: Rea
     }
     lastPathRef.current = pathname;
 
+    const controller = new AbortController();
     const clientContext = createClientContext();
-    sendEventToServer(requestId, { type: "soft-navigation", clientContext }).then(({ scripts }) => {
+
+    sendEventToServer(
+      requestId,
+      { type: "client-init", clientContext, softNavigation: true },
+      { signal: controller.signal }
+    ).then(({ scripts }) => {
       if (scripts?.length) addScripts(scripts);
     });
+
+    return () => controller.abort();
   }, [pathname, requestId, addScripts]);
 
   return (

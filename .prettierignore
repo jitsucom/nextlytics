@@ -5,3 +5,5 @@ dist
 bun.lock
 *.log
 *.md
+# nextjs app modifies this file
+e2e/test-app/tsconfig.json

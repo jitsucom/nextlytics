@@ -101,7 +101,7 @@ async function handleClientInit(
     dispatchEvent,
     updateEvent,
   } = hctx;
-  const { clientContext } = request;
+  const { clientContext, softNavigation } = request;
   const serverContext = reconstructServerContext(apiCallServerContext, clientContext);
 
   const { anonId: anonymousUserId } = await resolveAnonymousUser({
@@ -110,6 +110,7 @@ async function handleClientInit(
     config,
   });
 
+  // Always dispatch to "on-client-event" backends (both hard and soft navigation)
   const event: NextlyticsEvent = {
     eventId: pageRenderId,
     type: "pageView",
@@ -125,43 +126,14 @@ async function handleClientInit(
   const actions = await clientActions;
   after(() => completion);
 
-  // Also update "immediate" backends with client context
+  // Update "immediate" backends with client context
   after(() => updateEvent(pageRenderId, { clientContext, userContext, anonymousUserId }, ctx));
 
-  return Response.json({ ok: true, scripts: filterScripts(actions) });
-}
-
-async function handleSoftNavigation(
-  request: Extract<ClientRequest, { type: "soft-navigation" }>,
-  hctx: HandlerContext
-): Promise<Response> {
-  const { pageRenderId, ctx, apiCallServerContext, userContext, config, dispatchEvent } = hctx;
-  const { clientContext } = request;
-  const serverContext = reconstructServerContext(apiCallServerContext, clientContext);
-
-  const { anonId: anonymousUserId } = await resolveAnonymousUser({
-    ctx,
-    serverContext,
-    config,
+  // Only return scripts for hard navigation (soft navigation gets scripts from RSC)
+  return Response.json({
+    ok: true,
+    scripts: softNavigation ? undefined : filterScripts(actions),
   });
-
-  const event: NextlyticsEvent = {
-    eventId: generateId(),
-    parentEventId: pageRenderId,
-    type: "pageView",
-    collectedAt: new Date().toISOString(),
-    anonymousUserId,
-    serverContext,
-    clientContext,
-    userContext,
-    properties: {},
-  };
-
-  const { clientActions, completion } = dispatchEvent(event, ctx, "immediate");
-  const actions = await clientActions;
-  after(() => completion);
-
-  return Response.json({ ok: true, scripts: filterScripts(actions) });
 }
 
 async function handleClientEvent(
@@ -235,8 +207,6 @@ export async function handleEventPost(
   switch (body.type) {
     case "client-init":
       return handleClientInit(body, hctx);
-    case "soft-navigation":
-      return handleSoftNavigation(body, hctx);
     case "client-event":
       return handleClientEvent(body, hctx);
     default:
