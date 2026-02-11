@@ -273,7 +273,7 @@ export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: Rea
     sendEventToServer(requestId, { type: "client-init", clientContext }).then(({ scripts }) => {
       if (scripts?.length) addScripts(scripts);
     });
-  }, [requestId, addScripts, pathname]);
+  }, [requestId, addScripts]); // pathname captured once on mount
 
   // Detect soft navigation and fetch scripts for new page
   useEffect(() => {
