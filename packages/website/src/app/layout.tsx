@@ -1,5 +1,5 @@
 import "./globals.css";
-import { NextlyticsServer } from "@nextlytics/core/server";
+import { Server as NextlyticsServer } from "@/nextlytics";
 import type { Metadata, Viewport } from "next";
 
 export const viewport: Viewport = {

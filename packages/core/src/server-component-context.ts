@@ -1,5 +1,5 @@
 import type { NextResponse } from "next/server";
-import type { JavascriptTemplate, TemplatizedScriptInsertion } from "./types";
+import type { TemplatizedScriptInsertion } from "./types";
 
 const HEADER_PREFIX = "x-nc-";
 
@@ -8,7 +8,6 @@ const headerKeys = {
   search: `${HEADER_PREFIX}search`,
   pageRenderId: `${HEADER_PREFIX}page-render-id`,
   scripts: `${HEADER_PREFIX}scripts`,
-  templates: `${HEADER_PREFIX}templates`,
 } as const;
 
 /** Context passed from middleware to server components via headers */
@@ -19,10 +18,8 @@ export type ServerComponentContext = {
   pathname: string;
   /** Query string */
   search: string;
-  /** Script actions to execute on client */
+  /** Script actions to execute on client (params only, templates come from config) */
   scripts: TemplatizedScriptInsertion<unknown>[];
-  /** Template definitions for scripts */
-  templates: Record<string, JavascriptTemplate>;
 };
 
 /** Serialize context to response headers (called in middleware) */
@@ -42,11 +39,6 @@ export function serializeServerComponentContext(
     if (scriptParts.length > 0) {
       response.headers.set(headerKeys.scripts, scriptParts.join(";"));
     }
-  }
-
-  // Serialize templates as JSON
-  if (Object.keys(ctx.templates).length > 0) {
-    response.headers.set(headerKeys.templates, JSON.stringify(ctx.templates));
   }
 }
 
@@ -82,23 +74,11 @@ export function restoreServerComponentContext(headersList: Headers): ServerCompo
   const scriptsHeader = headersList.get(headerKeys.scripts);
   const scripts = scriptsHeader ? parseScriptsHeader(scriptsHeader) : [];
 
-  // Parse templates
-  let templates: Record<string, JavascriptTemplate> = {};
-  const templatesHeader = headersList.get(headerKeys.templates);
-  if (templatesHeader) {
-    try {
-      templates = JSON.parse(templatesHeader);
-    } catch {
-      console.warn("[Nextlytics] Failed to parse templates header");
-    }
-  }
-
   return {
     pageRenderId,
     pathname,
     search,
     scripts,
-    templates,
   };
 }
 

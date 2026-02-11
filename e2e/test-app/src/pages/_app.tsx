@@ -1,7 +1,7 @@
 import type { AppContext, AppProps } from "next/app";
 import { NextlyticsClient, type NextlyticsContext } from "@nextlytics/core/client";
-import { getNextlyticsProps } from "@nextlytics/core";
 import { SessionProvider } from "next-auth/react";
+import { getNextlyticsProps } from "@/nextlytics";
 
 type MyAppProps = AppProps & { nextlyticsCtx: NextlyticsContext };
 
@@ -19,9 +19,10 @@ MyApp.getInitialProps = async (appContext: AppContext) => {
   const { ctx } = appContext;
 
   // Only get nextlytics props on server-side (when req is available)
-  const nextlyticsCtx: NextlyticsContext = ctx.req
-    ? getNextlyticsProps({ req: { headers: ctx.req.headers } })
-    : { requestId: "" };
+  let nextlyticsCtx: NextlyticsContext = { requestId: "" };
+  if (ctx.req) {
+    nextlyticsCtx = getNextlyticsProps({ req: { headers: ctx.req.headers } });
+  }
 
   return {
     pageProps: appContext.Component.getInitialProps

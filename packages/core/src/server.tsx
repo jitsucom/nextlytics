@@ -12,6 +12,7 @@ import type {
   ClientAction,
   DispatchResult,
   IngestPolicy,
+  JavascriptTemplate,
   NextlyticsBackend,
   NextlyticsBackendFactory,
   NextlyticsConfig,
@@ -21,10 +22,10 @@ import type {
   RequestContext,
   ServerEventContext,
 } from "./types";
-import { createHandlers } from "./handlers";
 import { logConfigWarnings, validateConfig, withDefaults } from "./config-helpers";
 import { createNextlyticsMiddleware } from "./middleware";
 import { generateId } from "./uitils";
+import { createGetNextlyticsProps } from "./pages-router";
 
 type ResolvedBackend = {
   backend: NextlyticsBackend;
@@ -90,24 +91,31 @@ export async function createRequestContext(): Promise<RequestContext> {
   };
 }
 
-export async function NextlyticsServer({ children }: { children: ReactNode }) {
-  const headersList = await headers();
-  const ctx = restoreServerComponentContext(headersList);
-
-  if (!ctx) {
-    console.warn(
-      "[Nextlytics] nextlyticsMiddleware should be added in order for NextlyticsServer to work"
-    );
-    return <>{children}</>;
+/** Collect templates from all backends */
+function collectTemplates(
+  config: NextlyticsConfig,
+  ctx: RequestContext
+): Record<string, JavascriptTemplate> {
+  const templates: Record<string, JavascriptTemplate> = {};
+  const backends = resolveBackends(config, ctx);
+  for (const { backend } of backends) {
+    if (backend.getClientSideTemplates) {
+      Object.assign(templates, backend.getClientSideTemplates());
+    }
   }
+  return templates;
+}
 
-  return (
-    <NextlyticsClient
-      ctx={{ requestId: ctx.pageRenderId, scripts: ctx.scripts, templates: ctx.templates }}
-    >
-      {children}
-    </NextlyticsClient>
+/**
+ * @deprecated Use the Server component returned by Nextlytics() instead.
+ */
+export async function NextlyticsServer({ children }: { children: ReactNode }) {
+  console.warn(
+    "[Nextlytics] NextlyticsServer is deprecated. Use the Server component from Nextlytics() instead:\n" +
+      "  const { Server } = Nextlytics(config);\n" +
+      "  // Then in layout: <Server>{children}</Server>"
   );
+  return <>{children}</>;
 }
 
 export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
@@ -223,7 +231,27 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
   };
 
   const middleware = createNextlyticsMiddleware(config, dispatchEventInternal, updateEventInternal);
-  const handlers = createHandlers();
+
+  /** Server component that provides analytics context to the app */
+  async function Server({ children }: { children: ReactNode }) {
+    const headersList = await headers();
+    const ctx = restoreServerComponentContext(headersList);
+
+    if (!ctx) {
+      console.warn("[Nextlytics] nextlyticsMiddleware should be added in order for Server to work");
+      return <>{children}</>;
+    }
+
+    // Get templates directly from backends (config is captured in closure)
+    const requestCtx = await createRequestContext();
+    const templates = collectTemplates(config, requestCtx);
+
+    return (
+      <NextlyticsClient ctx={{ requestId: ctx.pageRenderId, scripts: ctx.scripts, templates }}>
+        {children}
+      </NextlyticsClient>
+    );
+  }
 
   const analytics = async () => {
     const headersList = await headers();
@@ -273,7 +301,17 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     };
   };
 
-  return { middleware, handlers, analytics, dispatchEvent, updateEvent };
+  // Pages Router helper with config captured in closure
+  const getNextlyticsProps = createGetNextlyticsProps(config);
+
+  return {
+    middleware,
+    analytics,
+    dispatchEvent,
+    updateEvent,
+    Server,
+    getNextlyticsProps,
+  };
 }
 
 function createServerContextFromHeaders(

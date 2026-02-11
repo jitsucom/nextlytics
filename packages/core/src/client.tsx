@@ -13,6 +13,7 @@ import {
 import { usePathname } from "next/navigation";
 import type {
   ClientContext,
+  ClientRequest,
   JavascriptTemplate,
   ScriptElement,
   TemplatizedScriptInsertion,
@@ -213,8 +214,7 @@ type SendEventResult = {
 
 async function sendEventToServer(
   requestId: string,
-  type: string,
-  payload: unknown
+  request: ClientRequest
 ): Promise<SendEventResult> {
   try {
     const response = await fetch("/api/event", {
@@ -223,7 +223,7 @@ async function sendEventToServer(
         "Content-Type": "application/json",
         [headers.pageRenderId]: requestId,
       },
-      body: JSON.stringify({ type, payload }),
+      body: JSON.stringify(request),
     });
 
     if (response.status === 404) {
@@ -270,7 +270,7 @@ export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: Rea
     initialPathRef.current = pathname;
     lastPathRef.current = pathname;
     const clientContext = createClientContext();
-    sendEventToServer(requestId, "client-init", clientContext).then(({ scripts }) => {
+    sendEventToServer(requestId, { type: "client-init", clientContext }).then(({ scripts }) => {
       if (scripts?.length) addScripts(scripts);
     });
   }, [requestId, addScripts, pathname]);
@@ -284,7 +284,7 @@ export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: Rea
     lastPathRef.current = pathname;
 
     const clientContext = createClientContext();
-    sendEventToServer(requestId, "soft-navigation", clientContext).then(({ scripts }) => {
+    sendEventToServer(requestId, { type: "soft-navigation", clientContext }).then(({ scripts }) => {
       if (scripts?.length) addScripts(scripts);
     });
   }, [pathname, requestId, addScripts]);
@@ -321,7 +321,8 @@ export function useNextlytics(): NextlyticsClientApi {
       eventName: string,
       opts?: { props?: Record<string, unknown> }
     ): Promise<{ ok: boolean }> => {
-      const result = await sendEventToServer(requestId, "client-event", {
+      const result = await sendEventToServer(requestId, {
+        type: "client-event",
         name: eventName,
         props: opts?.props,
         collectedAt: new Date().toISOString(),

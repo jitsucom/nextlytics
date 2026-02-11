@@ -1,6 +1,5 @@
 export { Nextlytics, NextlyticsServer } from "./server";
 export { NextlyticsClient, useNextlytics, type NextlyticsContext } from "./client";
-export { getNextlyticsProps } from "./pages-router";
 export { loggingBackend } from "./backends/logging";
 export type {
   NextlyticsConfig,
@@ -13,6 +12,7 @@ export type {
   NextlyticsServerSide,
   ServerEventContext,
   ClientContext,
+  ClientRequest,
   UserContext,
   RequestContext,
   AnonymousUserResult,
@@ -22,4 +22,6 @@ export type {
   JavascriptTemplate,
   ClientAction,
   ScriptMode,
+  PagesRouterContext,
+  NextlyticsClientContext,
 } from "./types";

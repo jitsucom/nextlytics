@@ -73,7 +73,7 @@ function buildBackends(): BackendConfigEntry[] {
   return backends;
 }
 
-export const { handlers, middleware, analytics } = Nextlytics({
+export const { middleware, analytics, Server } = Nextlytics({
   callbacks: {
     async getUser(_ctx) {
       const session = await auth();

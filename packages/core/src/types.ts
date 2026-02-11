@@ -90,7 +90,7 @@ export interface NextlyticsEvent {
 }
 
 import type { RequestCookies } from "next/dist/server/web/spec-extension/cookies";
-import type { NextMiddleware, NextRequest } from "next/server";
+import type { NextMiddleware } from "next/server";
 
 export type AnonymousUserResult = {
   /** Anonymous user identifier */
@@ -246,12 +246,32 @@ export type NextlyticsServerSide = {
   ) => Promise<{ ok: boolean }>;
 };
 
-type AppRouteHandlers = Record<"GET" | "POST", (req: NextRequest) => Promise<Response>>;
+/** Context for Pages Router _app.tsx */
+export type PagesRouterContext = {
+  req: { headers: Record<string, string | string[] | undefined>; cookies?: Record<string, string> };
+};
+
+/** Context passed to NextlyticsClient */
+export type NextlyticsClientContext = {
+  requestId: string;
+  scripts?: TemplatizedScriptInsertion<unknown>[];
+  templates?: Record<string, JavascriptTemplate>;
+};
+
+/** Client-to-server request types (discriminated union) */
+export type ClientRequest =
+  | { type: "client-init"; clientContext: ClientContext }
+  | { type: "soft-navigation"; clientContext: ClientContext }
+  | {
+      type: "client-event";
+      name: string;
+      props?: Record<string, unknown>;
+      collectedAt: string;
+      clientContext: ClientContext;
+    };
 
 /** Return value from Nextlytics() */
 export type NextlyticsResult = {
-  /** Route handlers for /api/event */
-  handlers: AppRouteHandlers;
   /** Get server-side analytics API */
   analytics: () => Promise<NextlyticsServerSide>;
   /** Middleware to intercept requests */
@@ -260,4 +280,8 @@ export type NextlyticsResult = {
   dispatchEvent: (event: NextlyticsEvent) => Promise<DispatchResult>;
   /** Manually update existing event */
   updateEvent: (eventId: string, patch: Partial<NextlyticsEvent>) => Promise<void>;
+  /** Server component that wraps your app to provide analytics context (App Router) */
+  Server: (props: { children: React.ReactNode }) => Promise<React.ReactElement>;
+  /** Extract context for NextlyticsClient in Pages Router _app.tsx */
+  getNextlyticsProps: (ctx: PagesRouterContext) => NextlyticsClientContext;
 };

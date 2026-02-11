@@ -92,7 +92,7 @@ const backends: BackendConfigEntry[] = [
   consoleTestBackend(),
 ];
 
-export const { middleware, handlers, analytics } = Nextlytics({
+export const { middleware, analytics, Server, getNextlyticsProps } = Nextlytics({
   backends,
   callbacks: {
     async getUser() {
