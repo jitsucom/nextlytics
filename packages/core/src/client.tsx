@@ -10,6 +10,7 @@ import {
   useReducer,
   useRef,
 } from "react";
+import { usePathname } from "next/navigation";
 import type {
   ClientContext,
   JavascriptTemplate,
@@ -138,6 +139,24 @@ function InjectScript({
   return null;
 }
 
+/** Merge scripts by templateId - later scripts override earlier ones */
+function mergeScriptsByTemplateId(
+  scripts: TemplatizedScriptInsertion<unknown>[]
+): TemplatizedScriptInsertion<unknown>[] {
+  const byTemplateId = new Map<string, TemplatizedScriptInsertion<unknown>>();
+  const nonTemplates: TemplatizedScriptInsertion<unknown>[] = [];
+
+  for (const script of scripts) {
+    if (script.type === "script-template") {
+      byTemplateId.set(script.templateId, script);
+    } else {
+      nonTemplates.push(script);
+    }
+  }
+
+  return [...byTemplateId.values(), ...nonTemplates];
+}
+
 /** Renders initial scripts (from SSR) and dynamic scripts (from sendEvent calls) */
 function NextlyticsScripts({
   initialScripts,
@@ -146,7 +165,7 @@ function NextlyticsScripts({
 }) {
   const context = useContext(NextlyticsContext);
   if (!context) {
-    throw new Error("NextlyticsScripts should be called within NextlyticsContext")
+    throw new Error("NextlyticsScripts should be called within NextlyticsContext");
   }
 
   const { scriptsRef, subscribersRef, templates, requestId } = context;
@@ -161,20 +180,22 @@ function NextlyticsScripts({
   }, [subscribersRef]);
 
   const dynamicScripts = scriptsRef.current;
-  const allScripts = [...initialScripts, ...dynamicScripts];
+  // Merge by templateId - dynamic scripts override initial (they have newer params)
+  const allScripts = mergeScriptsByTemplateId([...initialScripts, ...dynamicScripts]);
 
   return (
     <>
-      {allScripts.flatMap((script, scriptIndex) => {
+      {allScripts.flatMap((script) => {
         if (script.type !== "script-template") return [];
         const template = templates[script.templateId];
         if (!template) {
           console.warn(`[Nextlytics] Template "${script.templateId}" not found`);
           return [];
         }
+        // Use templateId as key - same template = same component instances
         return template.items.map((item, itemIndex) => (
           <InjectScript
-            key={`${scriptIndex}:${script.templateId}:${itemIndex}`}
+            key={`${script.templateId}:${itemIndex}`}
             item={item}
             params={script.params}
             requestId={requestId}
@@ -224,6 +245,11 @@ async function sendEventToServer(
 export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: ReactNode }) {
   const { requestId, scripts: initialScripts = [], templates = {} } = props.ctx;
 
+  // Track pathname for soft navigation detection
+  const pathname = usePathname();
+  const initialPathRef = useRef<string | null>(null);
+  const lastPathRef = useRef<string | null>(null);
+
   // Refs for dynamic scripts (from sendEvent calls) - stable, no re-renders
   const scriptsRef = useRef<TemplatizedScriptInsertion<unknown>[]>([]);
   const subscribersRef = useRef<Set<() => void>>(new Set());
@@ -241,11 +267,27 @@ export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: Rea
 
   // Send client-init on mount (once per requestId)
   useEffect(() => {
+    initialPathRef.current = pathname;
+    lastPathRef.current = pathname;
     const clientContext = createClientContext();
     sendEventToServer(requestId, "client-init", clientContext).then(({ scripts }) => {
       if (scripts?.length) addScripts(scripts);
     });
-  }, [requestId, addScripts]);
+  }, [requestId, addScripts, pathname]);
+
+  // Detect soft navigation and fetch scripts for new page
+  useEffect(() => {
+    // Skip if this is the initial render or same path
+    if (initialPathRef.current === null || pathname === lastPathRef.current) {
+      return;
+    }
+    lastPathRef.current = pathname;
+
+    const clientContext = createClientContext();
+    sendEventToServer(requestId, "soft-navigation", clientContext).then(({ scripts }) => {
+      if (scripts?.length) addScripts(scripts);
+    });
+  }, [pathname, requestId, addScripts]);
 
   return (
     <NextlyticsContext.Provider value={contextValue}>

@@ -292,6 +292,38 @@ async function handleEventPost(
     // Filter to script-template only
     const scripts = actions.items.filter((i) => i.type === "script-template");
     return Response.json({ ok: true, scripts: scripts.length > 0 ? scripts : undefined });
+  } else if (type === "soft-navigation") {
+    // Soft navigation in App Router - layout didn't re-render, so we need to
+    // dispatch pageView and return scripts that would have been in the initial render
+    const clientContext = payload as unknown as ClientInitPayload;
+    const serverContext = reconstructServerContext(apiCallServerContext, clientContext);
+
+    const { anonId: anonymousUserId } = await resolveAnonymousUser({
+      ctx,
+      serverContext,
+      config,
+    });
+
+    const event: NextlyticsEvent = {
+      eventId: generateId(), // New event ID for the soft navigation
+      parentEventId: pageRenderId,
+      type: "pageView",
+      collectedAt: new Date().toISOString(),
+      anonymousUserId,
+      serverContext,
+      clientContext,
+      userContext,
+      properties: {},
+    };
+
+    // Dispatch to "immediate" backends (same as middleware would do)
+    const { clientActions, completion } = dispatchEvent(event, ctx, "immediate");
+    const actions = await clientActions;
+    after(() => completion);
+
+    // Filter to script-template only
+    const scripts = actions.items.filter((i) => i.type === "script-template");
+    return Response.json({ ok: true, scripts: scripts.length > 0 ? scripts : undefined });
   } else if (type === "client-event") {
     const clientContext = (payload.clientContext as ClientContext) || undefined;
     const serverContext = clientContext

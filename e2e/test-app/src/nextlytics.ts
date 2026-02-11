@@ -8,7 +8,9 @@ import { auth } from "./auth";
 type ScriptMode = "once" | "on-params-change" | "every-render";
 type ScriptElement = { async?: boolean; body?: string; src?: string; mode?: ScriptMode };
 type JavascriptTemplate = { items: ScriptElement[] };
-type ClientAction = { items: Array<{ type: "script-template"; templateId: string; params: unknown }> };
+type ClientAction = {
+  items: Array<{ type: "script-template"; templateId: string; params: unknown }>;
+};
 
 const CONSOLE_TEMPLATE_ID = "console-test";
 
