@@ -1,4 +1,9 @@
-import type { NextlyticsBackendFactory, NextlyticsEvent, RequestContext } from "@nextlytics/core";
+import type {
+  ClientAction,
+  NextlyticsBackendFactory,
+  NextlyticsEvent,
+  RequestContext,
+} from "@nextlytics/core";
 import { NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 
@@ -53,16 +58,17 @@ export function createDemoBackend(config: DemoBackendConfig = {}): NextlyticsBac
       name: "demo",
       supportsUpdates: true,
 
-      async onEvent(event: NextlyticsEvent): Promise<void> {
+      async onEvent(event: NextlyticsEvent): Promise<ClientAction | undefined> {
         if (
           !event.serverContext.path.startsWith("/demo") &&
           !event.serverContext.path.startsWith("/api/demo")
         ) {
-          return;
+          return undefined;
         }
         log("onEvent:", event.type, event.eventId);
         await redis.rpush(key, event);
         await redis.expire(key, SESSION_TTL);
+        return undefined;
       },
 
       async updateEvent(eventId: string, patch: Partial<NextlyticsEvent>): Promise<void> {

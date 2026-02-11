@@ -112,6 +112,7 @@ async function handleClientInit(
 
   // Always dispatch to "on-client-event" backends (both hard and soft navigation)
   const event: NextlyticsEvent = {
+    origin: "client",
     eventId: pageRenderId,
     type: "pageView",
     collectedAt: new Date().toISOString(),
@@ -129,10 +130,12 @@ async function handleClientInit(
   // Update "immediate" backends with client context
   after(() => updateEvent(pageRenderId, { clientContext, userContext, anonymousUserId }, ctx));
 
-  // Only return scripts for hard navigation (soft navigation gets scripts from RSC)
+  // App Router: on hard navigation the Server component re-renders and receives
+  // scripts via RSC headers. On soft navigation the Server/Client remains mounted,
+  // so scripts must be returned from /api/event.
   return Response.json({
     ok: true,
-    scripts: softNavigation ? undefined : filterScripts(actions),
+    items: softNavigation ? filterScripts(actions) : undefined,
   });
 }
 
@@ -154,6 +157,7 @@ async function handleClientEvent(
   });
 
   const event: NextlyticsEvent = {
+    origin: "client",
     eventId: generateId(),
     parentEventId: pageRenderId,
     type: name,
@@ -169,7 +173,7 @@ async function handleClientEvent(
   const actions = await clientActions;
   after(() => completion);
 
-  return Response.json({ ok: true, scripts: filterScripts(actions) });
+  return Response.json({ ok: true, items: filterScripts(actions) });
 }
 
 export async function handleEventPost(
@@ -204,12 +208,13 @@ export async function handleEventPost(
     updateEvent,
   };
 
-  switch (body.type) {
+  const bodyType = body.type;
+  switch (bodyType) {
     case "client-init":
       return handleClientInit(body, hctx);
     case "client-event":
       return handleClientEvent(body, hctx);
     default:
-      return Response.json({ ok: true });
+      return Response.json({ ok: false, error: `Unknown body type ${bodyType}` }, { status: 400 });
   }
 }

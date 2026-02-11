@@ -20,14 +20,27 @@ export type GoogleAnalyticsBackendOptions = {
    * - "anonymousUserId": Always use Nextlytics anonymousUserId
    */
   clientIdSource?: "gaCookie" | "anonymousUserId";
+  /**
+   * Prefer sending client-origin events from the browser (gtag) instead of Measurement Protocol.
+   * Default: true. Set to false to force Measurement Protocol when apiSecret is provided.
+   */
+  preferClientSideForClientEvents?: boolean;
 };
 
 type GATemplateParams = {
   measurementId: string;
-  config: Record<string, unknown>;
+  initial_config: Record<string, unknown>;
+  properties: Record<string, unknown>;
 };
 
-const GA_TEMPLATE_ID = "ga-gtag";
+type GAEventTemplateParams = {
+  eventName: string;
+  eventParams: Record<string, unknown>;
+  properties: Record<string, unknown>;
+};
+
+const GA_MAIN_TAG_TEMPLATE = "ga-gtag";
+const GA_EVENT_TEMPLATE = "ga-event";
 
 /**
  * Parse client_id from _ga cookie value.
@@ -182,6 +195,7 @@ export function googleAnalyticsBackend(
     // Extract client_id from _ga cookie if available
     const gaCookie = ctx.cookies.get("_ga");
     const gaCookieClientId = gaCookie ? parseGaCookie(gaCookie.value) : null;
+    const preferClientSideForClientEvents = opts.preferClientSideForClientEvents ?? true;
 
     return {
       name: "google-analytics",
@@ -190,7 +204,21 @@ export function googleAnalyticsBackend(
 
       getClientSideTemplates(): Record<string, JavascriptTemplate> {
         return {
-          [GA_TEMPLATE_ID]: {
+          [GA_EVENT_TEMPLATE]: {
+            items: [
+              // Update user properties for this event (if provided)
+              {
+                body: "gtag('set', {{json(properties)}});",
+                mode: "every-render",
+              },
+              // Fire event with merged params
+              {
+                body: "gtag('event', '{{eventName}}', {{json(eventParams)}});",
+                mode: "every-render",
+              },
+            ],
+          },
+          [GA_MAIN_TAG_TEMPLATE]: {
             items: [
               // External gtag.js - load once
               {
@@ -202,27 +230,34 @@ export function googleAnalyticsBackend(
               {
                 body: [
                   "window.dataLayer = window.dataLayer || [];",
-                  "function gtag(){dataLayer.push(arguments);}",
+                  opts.debugMode
+                    ? "function gtag(){ console.log('[gtag() call]', arguments); dataLayer.push(arguments); }"
+                    : "function gtag(){dataLayer.push(arguments);}",
                   "window.gtag = gtag;",
                   "gtag('js', new Date());",
                 ].join("\n"),
                 mode: "once",
               },
-              // Config - run when params change (e.g., user_id added after login)
+              // Config - run once (auto page_view handled by GA)
               {
-                body: "gtag('config', '{{measurementId}}', {{json(config)}});",
+                body: "gtag('config', '{{measurementId}}', {{json(initial_config)}});",
+                mode: "once",
+              },
+              // Updates that should NOT trigger page_view (e.g., user_id, user_properties)
+              {
+                body: "gtag('set', {{json(properties)}});",
                 mode: "on-params-change",
               },
-              // Page view - run on every navigation
-              {
-                body: "gtag('event', 'page_view');",
-              },
+              // // Page view - run on every navigation
+              // {
+              //   body: "gtag('event', 'page_view');",
+              // },
             ],
           },
         };
       },
 
-      async onEvent(event: NextlyticsEvent): Promise<void | ClientAction> {
+      async onEvent(event: NextlyticsEvent): Promise<ClientAction | undefined> {
         const clientId = getClientId(event, gaCookieClientId, clientIdSource);
         const userId = event.userContext?.userId;
 
@@ -235,39 +270,66 @@ export function googleAnalyticsBackend(
         } = event.userContext?.traits ?? {};
         const userProperties = Object.keys(customTraits).length > 0 ? customTraits : undefined;
 
-        // For pageView: return client-side scripts
         if (event.type === "pageView") {
-          const config: Record<string, unknown> = {
-            send_page_view: false,
+          const initial_config: Record<string, unknown> = {
+            // Rely on GA auto page_view (including SPA history changes).
+            send_page_view: true,
             client_id: clientId,
           };
-
           if (debugMode) {
-            config.debug_mode = true;
+            initial_config.debug_mode = true;
           }
+
+          const properties: Record<string, unknown> = {};
           if (userId) {
-            config.user_id = userId;
+            properties.user_id = userId;
           }
           if (userProperties) {
-            config.user_properties = userProperties;
+            properties.user_properties = userProperties;
           }
 
           return {
             items: [
               {
                 type: "script-template",
-                templateId: GA_TEMPLATE_ID,
+                templateId: GA_MAIN_TAG_TEMPLATE,
                 params: {
                   measurementId,
-                  config,
+                  initial_config,
+                  properties,
                 } satisfies GATemplateParams,
               },
             ],
           };
         }
 
-        // For other events: send via Measurement Protocol (if configured)
-        if (apiSecret) {
+        const eventParams = buildEventParams(event);
+        const properties: Record<string, unknown> = {};
+        if (userId) {
+          properties.user_id = userId;
+        }
+        if (userProperties) {
+          properties.user_properties = userProperties;
+        }
+
+        if (event.origin === "client") {
+          // Send client-origin events on the client by default (unless MP is explicitly enabled)
+          if (preferClientSideForClientEvents || !apiSecret) {
+            return {
+              items: [
+                {
+                  type: "script-template",
+                  templateId: GA_EVENT_TEMPLATE,
+                  params: {
+                    eventName: toGA4EventName(event.type),
+                    eventParams,
+                    properties,
+                  } satisfies GAEventTemplateParams,
+                },
+              ],
+            };
+          }
+
           await sendToMeasurementProtocol({
             measurementId,
             apiSecret,
@@ -275,12 +337,31 @@ export function googleAnalyticsBackend(
             userId,
             userProperties,
             eventName: toGA4EventName(event.type),
-            eventParams: buildEventParams(event),
+            eventParams,
             userAgent: getUserAgent(event),
             clientIp: getClientIp(event),
             debugMode,
           });
+          return undefined;
         }
+
+        if (!apiSecret) {
+          return undefined;
+        }
+
+        await sendToMeasurementProtocol({
+          measurementId,
+          apiSecret,
+          clientId,
+          userId,
+          userProperties,
+          eventName: toGA4EventName(event.type),
+          eventParams,
+          userAgent: getUserAgent(event),
+          clientIp: getClientIp(event),
+          debugMode,
+        });
+        return undefined;
       },
 
       updateEvent(): void {

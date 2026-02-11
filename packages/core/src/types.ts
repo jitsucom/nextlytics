@@ -69,6 +69,13 @@ export interface UserContext {
 
 /** Analytics event sent to backends */
 export interface NextlyticsEvent {
+  /**
+   * Where the event was triggered?
+   *  - server — on server, e.g in route or server side component
+   *  - client — on client
+   */
+  origin: "server" | "client";
+
   /** ISO timestamp when event was collected */
   collectedAt: string;
   /** Unique event ID */
@@ -229,7 +236,7 @@ export type NextlyticsBackend = {
   getClientSideTemplates?: () => Record<string, JavascriptTemplate>;
 
   /** Handle new event */
-  onEvent(event: NextlyticsEvent): Promise<void | ClientAction>;
+  onEvent(event: NextlyticsEvent): Promise<ClientAction | void | undefined>;
   /** Update existing event (e.g. add client context to server pageView) */
   updateEvent(eventId: string, patch: Partial<NextlyticsEvent>): Promise<void> | void;
 };
@@ -273,6 +280,14 @@ export type ClientRequest =
       collectedAt: string;
       clientContext: ClientContext;
     };
+
+/**
+ * Result of any /api/event call
+ */
+export type ClientRequestResult = {
+  ok: boolean;
+  items?: ClientActionItem[];
+};
 
 /** Return value from Nextlytics() */
 export type NextlyticsResult = {
