@@ -1,14 +1,17 @@
 import type { NextResponse } from "next/server";
 import type { TemplatizedScriptInsertion } from "./types";
 
-const HEADER_PREFIX = "x-nc-";
+const HEADER_PREFIX = "x-nl-";
 
-const headerKeys = {
+const headerNames = {
   pathname: `${HEADER_PREFIX}pathname`,
   search: `${HEADER_PREFIX}search`,
   pageRenderId: `${HEADER_PREFIX}page-render-id`,
+  isSoftNavigation: `${HEADER_PREFIX}is-soft-nav`,
   scripts: `${HEADER_PREFIX}scripts`,
 } as const;
+
+export const LAST_PAGE_RENDER_ID_COOKIE = "last-page-render-id";
 
 /** Context passed from middleware to server components via headers */
 export type ServerComponentContext = {
@@ -27,9 +30,9 @@ export function serializeServerComponentContext(
   response: NextResponse,
   ctx: ServerComponentContext
 ): void {
-  response.headers.set(headerKeys.pageRenderId, ctx.pageRenderId);
-  response.headers.set(headerKeys.pathname, ctx.pathname);
-  response.headers.set(headerKeys.search, ctx.search);
+  response.headers.set(headerNames.pageRenderId, ctx.pageRenderId);
+  response.headers.set(headerNames.pathname, ctx.pathname);
+  response.headers.set(headerNames.search, ctx.search);
 
   // Serialize scripts in compact format: templateId=params;templateId2=params2
   if (ctx.scripts.length > 0) {
@@ -37,7 +40,7 @@ export function serializeServerComponentContext(
       .filter((item) => item.type === "script-template")
       .map((s) => `${s.templateId}=${JSON.stringify(s.params)}`);
     if (scriptParts.length > 0) {
-      response.headers.set(headerKeys.scripts, scriptParts.join(";"));
+      response.headers.set(headerNames.scripts, scriptParts.join(";"));
     }
   }
 }
@@ -62,16 +65,16 @@ function parseScriptsHeader(header: string): TemplatizedScriptInsertion<unknown>
 
 /** Restore context from request headers (called in server components) */
 export function restoreServerComponentContext(headersList: Headers): ServerComponentContext | null {
-  const pageRenderId = headersList.get(headerKeys.pageRenderId);
+  const pageRenderId = headersList.get(headerNames.pageRenderId);
   if (!pageRenderId) {
     return null;
   }
 
-  const pathname = headersList.get(headerKeys.pathname) || "";
-  const search = headersList.get(headerKeys.search) || "";
+  const pathname = headersList.get(headerNames.pathname) || "";
+  const search = headersList.get(headerNames.search) || "";
 
   // Parse scripts
-  const scriptsHeader = headersList.get(headerKeys.scripts);
+  const scriptsHeader = headersList.get(headerNames.scripts);
   const scripts = scriptsHeader ? parseScriptsHeader(scriptsHeader) : [];
 
   return {
@@ -83,4 +86,4 @@ export function restoreServerComponentContext(headersList: Headers): ServerCompo
 }
 
 // Re-export header keys for backward compatibility
-export { headerKeys as headers };
+export { headerNames };

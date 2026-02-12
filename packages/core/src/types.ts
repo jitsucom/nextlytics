@@ -204,22 +204,18 @@ export type DispatchResult = {
 
 export type JavascriptTemplate = {
   items: ScriptElement[];
+  /**
+   * Optional dependency key template. When this value changes, the script re-injects.
+   * If omitted, the template is treated as "once".
+   */
+  deps?: string | string[];
 };
-
-/**
- * Controls when a script runs during navigation:
- * - "once": Run only on first mount (e.g., gtag.js, analytics init)
- * - "on-params-change": Run when template params change (e.g., config with user_id)
- * - "every-render": Run on every navigation (e.g., page_view events)
- */
-export type ScriptMode = "once" | "on-params-change" | "every-render";
 
 export type ScriptElement = {
   async?: boolean;
-  body?: string;
+  //string[] means multiple lines, for convinience
+  body?: string | string[];
   src?: string;
-  /** Controls when script runs. Default: "every-render" */
-  mode?: ScriptMode;
 };
 
 /** Backend that receives analytics events */
@@ -300,5 +296,5 @@ export type NextlyticsResult = {
   /** Manually update existing event */
   updateEvent: (eventId: string, patch: Partial<NextlyticsEvent>) => Promise<void>;
   /** Server component that wraps your app to provide analytics context (App Router) */
-  Server: (props: { children: React.ReactNode }) => Promise<React.ReactElement>;
+  NextlyticsServer: (props: { children: React.ReactNode }) => Promise<React.ReactElement>;
 };

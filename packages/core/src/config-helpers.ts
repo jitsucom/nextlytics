@@ -12,7 +12,7 @@ export function withDefaults(config: NextlyticsConfig): NextlyticsConfigWithDefa
     ...config,
     excludeApiCalls: config.excludeApiCalls ?? false,
     eventEndpoint: config.eventEndpoint ?? "/api/event",
-    isApiPath: config.isApiPath ?? (() => false),
+    isApiPath: config.isApiPath ?? ((str: string) => str.startsWith("/api")),
     backends: config.backends ?? [],
     anonymousUsers: {
       gdprMode: config.anonymousUsers?.gdprMode ?? true,

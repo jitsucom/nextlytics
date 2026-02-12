@@ -35,7 +35,7 @@ try {
   // Pages Router - usePathname not available
 }
 
-function usePathnameSafe(): string | null {
+export function usePathnameSafe(): string | null {
   if (!usePathnameImpl) return null;
   return usePathnameImpl();
 }

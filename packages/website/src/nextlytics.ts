@@ -1,18 +1,18 @@
 import { Nextlytics } from "@nextlytics/core/server";
-import type { BackendConfigEntry } from "@nextlytics/core";
+import { BackendConfigEntry, loggingBackend } from "@nextlytics/core";
 import { createDemoBackend } from "./lib/demo-backend";
 import { auth } from "./lib/auth";
 
 import { segmentBackend } from "@nextlytics/core/backends/segment";
-import { googleTagManagerBackend } from "@nextlytics/core/backends/gtm";
-import { googleAnalyticsBackend } from "@nextlytics/core/backends/ga";
 import { neonBackend } from "@nextlytics/core/backends/neon";
 import { postgrestBackend } from "@nextlytics/core/backends/postgrest";
 import { clickhouseBackend } from "@nextlytics/core/backends/clickhouse";
 import { posthogBackend } from "@nextlytics/core/backends/posthog";
+import { googleAnalyticsBackend } from "@nextlytics/core/backends/ga";
+import { googleTagManagerBackend } from "@nextlytics/core/backends/gtm";
 
 function buildBackends(): BackendConfigEntry[] {
-  const backends: BackendConfigEntry[] = [createDemoBackend()];
+  const backends: BackendConfigEntry[] = [createDemoBackend(), loggingBackend()];
 
   if (process.env.SEGMENT_WRITE_KEY) {
     backends.push(
@@ -73,7 +73,7 @@ function buildBackends(): BackendConfigEntry[] {
   return backends;
 }
 
-export const { middleware, analytics, Server } = Nextlytics({
+export const { middleware, analytics, NextlyticsServer } = Nextlytics({
   callbacks: {
     async getUser(_ctx) {
       const session = await auth();

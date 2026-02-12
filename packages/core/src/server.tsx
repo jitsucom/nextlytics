@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { headers, cookies } from "next/headers";
 import { removeSensitiveHeaders } from "./headers";
 import {
-  headers as analyticsHeaders,
+  headerNames,
   restoreServerComponentContext,
 } from "./server-component-context";
 import { resolveAnonymousUser } from "./anonymous-user";
@@ -31,6 +31,8 @@ type ResolvedBackend = {
   ingestPolicy: IngestPolicy;
 };
 
+type PolicyFilter = IngestPolicy | "client-actions";
+
 function isBackendWithConfig(entry: unknown): entry is BackendWithConfig {
   return typeof entry === "object" && entry !== null && "backend" in entry;
 }
@@ -38,7 +40,7 @@ function isBackendWithConfig(entry: unknown): entry is BackendWithConfig {
 function resolveBackends(
   config: NextlyticsConfig,
   ctx: RequestContext,
-  policyFilter?: IngestPolicy
+  policyFilter?: PolicyFilter
 ): ResolvedBackend[] {
   const entries = config.backends || [];
   return entries
@@ -53,7 +55,13 @@ function resolveBackends(
       return backend ? { backend, ingestPolicy: "immediate" } : null;
     })
     .filter((b): b is ResolvedBackend => b !== null)
-    .filter((b) => !policyFilter || b.ingestPolicy === policyFilter);
+    .filter((b) => {
+      if (!policyFilter) return true;
+      if (policyFilter === "client-actions") {
+        return b.ingestPolicy === "on-client-event" || b.backend.returnsClientActions;
+      }
+      return b.ingestPolicy === policyFilter;
+    });
 }
 
 function resolvePlugins(config: NextlyticsConfig, ctx: RequestContext): NextlyticsPlugin[] {
@@ -105,17 +113,6 @@ function collectTemplates(
   return templates;
 }
 
-/**
- * @deprecated Use the Server component returned by Nextlytics() instead.
- */
-export async function NextlyticsServer({ children }: { children: ReactNode }) {
-  console.warn(
-    "[Nextlytics] NextlyticsServer is deprecated. Use the Server component from Nextlytics() instead:\n" +
-      "  const { Server } = Nextlytics(config);\n" +
-      "  // Then in layout: <Server>{children}</Server>"
-  );
-  return <>{children}</>;
-}
 
 export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
   const config = withDefaults(userConfig);
@@ -127,7 +124,7 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
   const dispatchEventInternal = (
     event: NextlyticsEvent,
     ctx: RequestContext,
-    policyFilter?: IngestPolicy
+    policyFilter?: PolicyFilter
   ): DispatchResult => {
     const plugins = resolvePlugins(config, ctx);
     const resolved = resolveBackends(config, ctx, policyFilter);
@@ -255,7 +252,7 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
   const analytics = async () => {
     const headersList = await headers();
     const cookieStore = await cookies();
-    const pageRenderId = headersList.get(analyticsHeaders.pageRenderId);
+    const pageRenderId = headersList.get(headerNames.pageRenderId);
 
     const serverContext = createServerContextFromHeaders(headersList);
     const ctx: RequestContext = { headers: headersList, cookies: cookieStore };
@@ -284,6 +281,7 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
         }
 
         const event: NextlyticsEvent = {
+          origin: "server",
           eventId: generateId(),
           parentEventId: pageRenderId,
           type: eventName,
@@ -305,7 +303,7 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     analytics,
     dispatchEvent,
     updateEvent,
-    Server,
+    NextlyticsServer: Server,
   };
 }
 
@@ -318,8 +316,8 @@ function createServerContextFromHeaders(
   });
   const requestHeaders = removeSensitiveHeaders(rawHeaders);
 
-  const pathname = headersList.get(analyticsHeaders.pathname) || "";
-  const search = headersList.get(analyticsHeaders.search) || "";
+  const pathname = headersList.get(headerNames.pathname) || "";
+  const search = headersList.get(headerNames.search) || "";
   const searchParams: Record<string, string[]> = {};
 
   if (search) {

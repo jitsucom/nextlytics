@@ -16,12 +16,11 @@ import type {
   ClientRequest,
   ClientRequestResult,
   JavascriptTemplate,
-  ScriptElement,
-  ScriptMode,
   TemplatizedScriptInsertion,
 } from "./types";
-import { headers } from "./server-component-context";
+import { headerNames } from "./server-component-context";
 import { apply, compile, type TemplateFunctions } from "./template";
+import {stableHash} from "./stable-hash";
 
 /** Context object for Pages Router integration */
 export type NextlyticsContext = {
@@ -33,6 +32,7 @@ export type NextlyticsContext = {
 const templateFunctions: TemplateFunctions = {
   q: (v) => JSON.stringify(v ?? null),
   json: (v) => JSON.stringify(v ?? null),
+  stableHash: (v) => stableHash(v as any)
 };
 
 type NextlyticsContextValue = {
@@ -68,100 +68,111 @@ function createClientContext(): ClientContext {
   };
 }
 
-/** Build deps array based on script modes */
-function buildDeps(
-  modes: (ScriptMode | undefined)[],
-  paramsKey: string,
-  requestId: string
-): string[] {
-  const deps: string[] = [];
-  if (modes.some((m) => m === "on-params-change")) {
-    deps.push(paramsKey);
-  }
-  if (modes.some((m) => m === "every-render" || m === undefined)) {
-    deps.push(requestId);
-  }
-  return deps;
-}
-
 type CompiledScript = InjectScriptProps & { key: string };
 
 /**
- * Compile scripts from templates into InjectScriptProps.
- * Groups consecutive body scripts together, keeps external scripts separate.
+ * Deduplicate script insertions by template id + deps.
+ *
+ * Why this exists:
+ * - The same template can arrive twice (SSR headers + client-init response).
+ *
+ * Behavior:
+ * - If a template has no deps, keep ALL instances (like useEffect without deps).
+ * - If a template has deps, keep the FIRST instance for each deps key.
+ *   (prevents duplicates while still allowing distinct dep values)
+ *
+ * Only script-template entries are expected; other types are ignored.
  */
-function compileScripts(
+function deduplicateScripts(
   scripts: TemplatizedScriptInsertion<unknown>[],
-  templates: Record<string, JavascriptTemplate>,
-  requestId: string
-): CompiledScript[] {
-  const result: CompiledScript[] = [];
+  templates: Record<string, JavascriptTemplate>
+): TemplatizedScriptInsertion<unknown>[] {
+  const result: TemplatizedScriptInsertion<unknown>[] = [];
+  const firstSeenByDeps = new Set<string>();
 
   for (const script of scripts) {
     if (script.type !== "script-template") continue;
+    const template = templates[script.templateId];
+    if (!template) continue;
 
+    if (!template.deps) {
+      result.push(script);
+      continue;
+    }
+
+    const paramsRecord = (script.params || {}) as Record<string, unknown>;
+    const deps = compileTemplateDeps(template, paramsRecord);
+    const depsKey = `${script.templateId}\0${deps.join("\0")}`;
+    if (firstSeenByDeps.has(depsKey)) continue;
+    firstSeenByDeps.add(depsKey);
+    result.push(script);
+  }
+
+  return result;
+}
+
+/**
+ * Compile scripts from templates into InjectScriptProps.
+ * Assumes the input is already deduplicated.
+ */
+function compileScripts(
+  scripts: TemplatizedScriptInsertion<unknown>[],
+  templates: Record<string, JavascriptTemplate>
+): CompiledScript[] {
+  const result: CompiledScript[] = [];
+
+  for (const [scriptIndex, script] of scripts.entries()) {
+    if (script.type !== "script-template") continue;
     const template = templates[script.templateId];
     if (!template) {
       console.warn(`[Nextlytics] Template "${script.templateId}" not found`);
       continue;
     }
 
-    const paramsRecord = script.params as Record<string, unknown>;
-    const paramsKey = JSON.stringify(script.params);
-    let currentBodyItems: ScriptElement[] = [];
-    let groupIndex = 0;
-
-    const flushBodyGroup = () => {
-      if (currentBodyItems.length === 0) return;
-
-      const body = currentBodyItems
-        .map((item) => {
-          if (!item.body) return "";
-          const compiled = compile(item.body);
-          return apply(compiled, paramsRecord, templateFunctions);
-        })
-        .join("\n");
-
-      const deps = buildDeps(
-        currentBodyItems.map((i) => i.mode),
-        paramsKey,
-        requestId
-      );
-
-      result.push({
-        key: `${script.templateId}:body:${groupIndex}`,
-        body,
-        deps,
-      });
-      currentBodyItems = [];
-      groupIndex++;
-    };
+    const paramsRecord = (script.params || {}) as Record<string, unknown>;
+    const deps = compileTemplateDeps(template, paramsRecord);
+    let itemIndex = 0;
 
     for (const item of template.items) {
-      if (item.src) {
-        // External script - flush pending body group first
-        flushBodyGroup();
+      const keyPrefix = `${script.templateId}:${scriptIndex}:${item.src ? "ext" : "body"}:${itemIndex}`;
 
+      if (item.src) {
         const compiledSrc = compile(item.src);
         const src = apply(compiledSrc, paramsRecord, templateFunctions);
-
         result.push({
-          key: `${script.templateId}:ext:${groupIndex}`,
+          key: keyPrefix,
           src,
           async: item.async,
-          // deps: [] = load once
+          deps,
         });
-        groupIndex++;
-      } else if (item.body) {
-        currentBodyItems.push(item);
+        itemIndex++;
+        continue;
       }
-    }
 
-    // Flush remaining body group
-    flushBodyGroup();
+      if (!item.body) {
+        itemIndex++;
+        continue;
+      }
+
+      const bodyText = Array.isArray(item.body) ? item.body.join("\n") : item.body;
+      const compiled = compile(bodyText);
+      const body = apply(compiled, paramsRecord, templateFunctions);
+
+      result.push({ key: keyPrefix, body, deps });
+      itemIndex++;
+    }
   }
 
   return result;
+}
+
+function compileTemplateDeps(
+  template: JavascriptTemplate,
+  paramsRecord: Record<string, unknown>
+): string[] {
+  if (!template.deps) return [];
+  const rawDeps = Array.isArray(template.deps) ? template.deps : [template.deps];
+  return rawDeps.map((dep) => apply(compile(dep), paramsRecord, templateFunctions));
 }
 
 /** Renders initial scripts (from SSR) and dynamic scripts (from sendEvent calls) */
@@ -175,7 +186,7 @@ function NextlyticsScripts({
     throw new Error("NextlyticsScripts should be called within NextlyticsContext");
   }
 
-  const { scriptsRef, subscribersRef, templates, requestId } = context;
+  const { scriptsRef, subscribersRef, templates } = context;
   const [, forceUpdate] = useReducer((x) => x + 1, 0);
 
   // Subscribe to dynamic script changes
@@ -187,11 +198,14 @@ function NextlyticsScripts({
   }, [subscribersRef]);
 
   const allScripts = [...initialScripts, ...scriptsRef.current];
-
+  const dedupedScripts = useMemo(
+    () => deduplicateScripts(allScripts, templates),
+    [allScripts, templates]
+  );
   // Compile all scripts into InjectScriptProps
   const compiled = useMemo(
-    () => compileScripts(allScripts, templates, requestId),
-    [allScripts, templates, requestId]
+    () => compileScripts(dedupedScripts, templates),
+    [dedupedScripts, templates]
   );
 
   debug("Rendering scripts", {
@@ -213,15 +227,19 @@ function NextlyticsScripts({
 async function sendEventToServer(
   requestId: string,
   request: ClientRequest,
-  { signal }: { signal?: AbortSignal } = {}
+  { signal, isSoftNavigation }: { signal?: AbortSignal; isSoftNavigation?: boolean } = {}
 ): Promise<ClientRequestResult> {
   try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      [headerNames.pageRenderId]: requestId,
+    } ;
+    if (isSoftNavigation) {
+      headers[headerNames.isSoftNavigation] = "1";
+    }
     const response = await fetch("/api/event", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        [headers.pageRenderId]: requestId,
-      },
+      headers,
       body: JSON.stringify(request),
       signal,
     });
@@ -274,7 +292,7 @@ export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: Rea
     sendEventToServer(
       requestId,
       { type: "client-init", clientContext, softNavigation: softNavigation || undefined },
-      { signal }
+      { signal, isSoftNavigation: softNavigation }
     ).then(({ items }) => {
       debug("client-init response", { scriptsCount: items?.length ?? 0 });
       if (items?.length) addScripts(items);

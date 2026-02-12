@@ -30,16 +30,21 @@ export type GoogleAnalyticsBackendOptions = {
 type GATemplateParams = {
   measurementId: string;
   initial_config: Record<string, unknown>;
+};
+
+type GAPropertiesTemplateParams = {
   properties: Record<string, unknown>;
 };
 
 type GAEventTemplateParams = {
+  eventId: string;
   eventName: string;
   eventParams: Record<string, unknown>;
   properties: Record<string, unknown>;
 };
 
-const GA_MAIN_TAG_TEMPLATE = "ga-gtag";
+const GA_INIT_TEMPLATE = "ga-gtag";
+const GA_PROPERTIES_TEMPLATE = "ga-properties";
 const GA_EVENT_TEMPLATE = "ga-event";
 
 /**
@@ -205,26 +210,24 @@ export function googleAnalyticsBackend(
       getClientSideTemplates(): Record<string, JavascriptTemplate> {
         return {
           [GA_EVENT_TEMPLATE]: {
+            deps: "{{eventId}}",
             items: [
               // Update user properties for this event (if provided)
               {
-                body: "gtag('set', {{json(properties)}});",
-                mode: "every-render",
-              },
-              // Fire event with merged params
-              {
-                body: "gtag('event', '{{eventName}}', {{json(eventParams)}});",
-                mode: "every-render",
+                body: [
+                  "gtag('set', {{json(properties)}});",
+                  "gtag('event', '{{eventName}}', {{json(eventParams)}});",
+                ],
               },
             ],
           },
-          [GA_MAIN_TAG_TEMPLATE]: {
+          [GA_INIT_TEMPLATE]: {
+            deps: "{{measurementId}}{{json(initial_config)}}",
             items: [
               // External gtag.js - load once
               {
                 src: "https://www.googletagmanager.com/gtag/js?id={{measurementId}}",
                 async: true,
-                mode: "once",
               },
               // gtag definition and initialization - run once
               {
@@ -235,23 +238,18 @@ export function googleAnalyticsBackend(
                     : "function gtag(){dataLayer.push(arguments);}",
                   "window.gtag = gtag;",
                   "gtag('js', new Date());",
-                ].join("\n"),
-                mode: "once",
+                  "gtag('config', '{{measurementId}}', {{json(initial_config)}});",
+                ],
               },
-              // Config - run once (auto page_view handled by GA)
-              {
-                body: "gtag('config', '{{measurementId}}', {{json(initial_config)}});",
-                mode: "once",
-              },
+            ],
+          },
+          [GA_PROPERTIES_TEMPLATE]: {
+            deps: "{{json(properties)}}",
+            items: [
               // Updates that should NOT trigger page_view (e.g., user_id, user_properties)
               {
                 body: "gtag('set', {{json(properties)}});",
-                mode: "on-params-change",
               },
-              // // Page view - run on every navigation
-              // {
-              //   body: "gtag('event', 'page_view');",
-              // },
             ],
           },
         };
@@ -292,12 +290,18 @@ export function googleAnalyticsBackend(
             items: [
               {
                 type: "script-template",
-                templateId: GA_MAIN_TAG_TEMPLATE,
+                templateId: GA_INIT_TEMPLATE,
                 params: {
                   measurementId,
                   initial_config,
-                  properties,
                 } satisfies GATemplateParams,
+              },
+              {
+                type: "script-template",
+                templateId: GA_PROPERTIES_TEMPLATE,
+                params: {
+                  properties,
+                } satisfies GAPropertiesTemplateParams,
               },
             ],
           };
@@ -321,6 +325,7 @@ export function googleAnalyticsBackend(
                   type: "script-template",
                   templateId: GA_EVENT_TEMPLATE,
                   params: {
+                    eventId: event.eventId,
                     eventName: toGA4EventName(event.type),
                     eventParams,
                     properties,

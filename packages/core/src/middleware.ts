@@ -1,6 +1,6 @@
 import type { NextMiddleware, NextRequest } from "next/server";
 import { NextResponse, after } from "next/server";
-import { serializeServerComponentContext } from "./server-component-context";
+import { LAST_PAGE_RENDER_ID_COOKIE, serializeServerComponentContext } from "./server-component-context";
 import type {
   NextlyticsEvent,
   RequestContext,
@@ -35,6 +35,27 @@ export function createNextlyticsMiddleware(
   return async (request) => {
     const pathname = request.nextUrl.pathname;
     const reqInfo = getRequestInfo(request);
+    const middlewareDebug =
+      config.debug || process.env.NEXTLYTICS_MIDDLEWARE_DEBUG === "true";
+
+    if (middlewareDebug) {
+      const headers = request.headers;
+      const debugHeaders: Record<string, string> = {};
+      headers.forEach((value, key) => {
+        debugHeaders[key] = value;
+      });
+
+      console.log("[Nextlytics][middleware]", {
+        pathname,
+        method: request.method,
+        isPrefetch: reqInfo.isPrefetch,
+        isRsc: reqInfo.isRsc,
+        isPageNavigation: reqInfo.isPageNavigation,
+        isStaticFile: reqInfo.isStaticFile,
+        isNextjsInternal: reqInfo.isNextjsInternal,
+        headers: debugHeaders,
+      });
+    }
 
     // Handle event endpoint directly in middleware
     if (pathname === eventEndpoint) {
@@ -53,6 +74,7 @@ export function createNextlyticsMiddleware(
     const serverContext = createServerContext(request);
     const response = NextResponse.next();
     const ctx = createRequestContext(request);
+    response.cookies.set(LAST_PAGE_RENDER_ID_COOKIE, pageRenderId, { path: "/" });
 
     // Resolve anonymous user ID (sets cookie if needed)
     const { anonId } = await resolveAnonymousUser({ ctx, serverContext, config, response });
@@ -122,6 +144,7 @@ function createPageViewEvent(
 ): NextlyticsEvent {
   const eventType = isApiPath ? "apiCall" : "pageView";
   return {
+    origin: "server",
     collectedAt: serverContext.collectedAt.toISOString(),
     eventId: pageRenderId,
     type: eventType,

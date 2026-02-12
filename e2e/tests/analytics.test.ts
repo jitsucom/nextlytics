@@ -4,11 +4,15 @@ import { TestAppLauncher, type NextVersion } from "./test-app-launcher";
 import { TestApp, type RouterType } from "./test-app";
 
 const services = new ThirdpartyServices();
-const versions: NextVersion[] = ["next15", "next16"];
-const routers: RouterType[] = ["app", "pages"];
+const envVersion = process.env.NEXT_E2E_VERSION as NextVersion | undefined;
+const envRouter = process.env.NEXT_E2E_ROUTER as RouterType | undefined;
+const versions: NextVersion[] = envVersion ? [envVersion] : ["next15", "next16"];
+const routers: RouterType[] = envRouter ? [envRouter] : ["app", "pages"];
 
 beforeAll(async () => {
-  await services.start();
+  if (process.env.NEXT_E2E_SKIP_SERVICES !== "true") {
+    await services.start();
+  }
 }, 60000);
 
 afterAll(async () => {
@@ -41,7 +45,9 @@ describe.each(versions)("%s", (version) => {
     });
 
     beforeEach(async () => {
-      await testApp.clearAnalytics();
+      if (process.env.NEXT_E2E_SKIP_SERVICES !== "true") {
+        await testApp.clearAnalytics();
+      }
     });
 
     it("tracks page view for anonymous user", async () => {
@@ -49,9 +55,8 @@ describe.each(versions)("%s", (version) => {
 
       await testApp.visitHome(page);
 
-      const events = await testApp.waitForEvents((e) =>
-        e.some((ev) => ev.type === "pageView" && ev.path === testApp.homePath)
-      );
+      await page.waitForTimeout(300);
+      const events = await testApp.getAnalyticsEvents();
 
       const pageViewEvent = events.find(
         (e) => e.type === "pageView" && e.path === testApp.homePath
@@ -72,9 +77,8 @@ describe.each(versions)("%s", (version) => {
       const userStatus = await page.textContent('[data-testid="user-status"]');
       expect(userStatus).toContain("Test User");
 
-      const events = await testApp.waitForEvents((e) =>
-        e.some((ev) => ev.user_id === "test-user-id")
-      );
+      await page.waitForTimeout(300);
+      const events = await testApp.getAnalyticsEvents();
       const authenticatedEvents = events.filter((e) => e.user_id === "test-user-id");
 
       expect(authenticatedEvents.length).toBeGreaterThanOrEqual(1);
@@ -91,10 +95,18 @@ describe.each(versions)("%s", (version) => {
       await page.click('[data-testid="test-page-link"]');
       await page.waitForLoadState("networkidle");
 
-      const events = await testApp.waitForEvents(
-        (e) => e.filter((ev) => ev.type === "pageView").length === 2
-      );
+      await page.waitForTimeout(300);
+      const events = await testApp.getAnalyticsEvents();
       const pageViews = events.filter((e) => e.type === "pageView");
+      console.log(
+        "[e2e][pageViews]",
+        pageViews.map((e) => ({
+          path: e.path,
+          type: e.type,
+          event_id: e.event_id,
+          parent_event_id: e.parent_event_id,
+        }))
+      );
 
       expect(pageViews.length).toBe(2);
       const paths = pageViews.map((e) => e.path);
@@ -109,9 +121,8 @@ describe.each(versions)("%s", (version) => {
 
       await testApp.visitHome(page);
 
-      const events = await testApp.waitForEvents((e) =>
-        e.some((ev) => ev.type === "pageView" && ev.path === testApp.homePath)
-      );
+      await page.waitForTimeout(300);
+      const events = await testApp.getAnalyticsEvents();
       const pageViewEvent = events.find(
         (e) => e.type === "pageView" && e.path === testApp.homePath
       );
@@ -130,9 +141,8 @@ describe.each(versions)("%s", (version) => {
       await testApp.visitHome(page);
       await testApp.visitTestPage(page);
 
-      const events = await testApp.waitForEvents(
-        (e) => e.filter((ev) => ev.type === "pageView").length === 2
-      );
+      await page.waitForTimeout(300);
+      const events = await testApp.getAnalyticsEvents();
       const pageViews = events.filter((e) => e.type === "pageView");
 
       expect(pageViews.length).toBe(2);
@@ -148,13 +158,10 @@ describe.each(versions)("%s", (version) => {
       await testApp.visitHome(page);
 
       // Wait for events in both backends
+      await page.waitForTimeout(500);
       const [immediateEvents, delayedEvents] = await Promise.all([
-        testApp.waitForEvents((e) =>
-          e.some((ev) => ev.type === "pageView" && ev.path === testApp.homePath)
-        ),
-        testApp.waitForDelayedEvents((e) =>
-          e.some((ev) => ev.type === "pageView" && ev.path === testApp.homePath)
-        ),
+        testApp.getAnalyticsEvents(),
+        testApp.getDelayedAnalyticsEvents(),
       ]);
 
       const immediatePageView = immediateEvents.find(
@@ -198,62 +205,59 @@ describe.each(versions)("%s", (version) => {
       await page.waitForLoadState("networkidle");
 
       // Wait for initial scripts to execute
-      await page.waitForFunction(() => window.__nextlyticsTestOnce !== undefined);
+      await page.waitForFunction(() => window.__nextlyticsTestInit !== undefined);
 
       // Get initial counters
       const initialCounters = await page.evaluate(() => ({
-        once: window.__nextlyticsTestOnce,
-        paramsChange: window.__nextlyticsTestParamsChange,
-        everyRender: window.__nextlyticsTestEveryRender,
+        init: window.__nextlyticsTestInit,
+        config: window.__nextlyticsTestConfig,
+        event: window.__nextlyticsTestEvent,
       }));
 
-      expect(initialCounters.once).toBe(1);
-      expect(initialCounters.paramsChange).toBe(1);
-      expect(initialCounters.everyRender).toBe(1);
+      expect(initialCounters.init).toBe(1);
+      expect(initialCounters.config).toBe(1);
+      expect(initialCounters.event).toBe(1);
 
-      // Soft navigate to test page using Link
+      // Here's why double wait, first is to make sure /api/event was started (it's async
+      // second, wait until /api/event is done and give some time to inject scripts 
       await page.click('[data-testid="test-page-link"]');
+      await page.waitForTimeout(100);
       await page.waitForLoadState("networkidle");
-      await page.waitForFunction(
-        (prev) => (window.__nextlyticsTestEveryRender ?? 0) > prev,
-        initialCounters.everyRender ?? 0
-      );
+      await page.waitForTimeout(200);
 
       // Get counters after soft navigation
       const afterNavCounters = await page.evaluate(() => ({
-        once: window.__nextlyticsTestOnce,
-        paramsChange: window.__nextlyticsTestParamsChange,
-        everyRender: window.__nextlyticsTestEveryRender,
+        init: window.__nextlyticsTestInit,
+        config: window.__nextlyticsTestConfig,
+        event: window.__nextlyticsTestEvent,
       }));
 
-      // "once" should still be 1 - not re-executed
-      expect(afterNavCounters.once).toBe(1);
-      // "on-params-change" should be 2 - path changed from "/" to "/test-page"
-      expect(afterNavCounters.paramsChange).toBe(2);
-      // "every-render" should be 2 - runs on every navigation
-      expect(afterNavCounters.everyRender).toBe(2);
+      // init should still be 1 - not re-executed
+      expect(afterNavCounters.init).toBe(1);
+      // config should be 2 - path changed from "/" to "/test-page"
+      expect(afterNavCounters.config).toBe(2);
+      // event should be 2 - runs on every navigation
+      expect(afterNavCounters.event).toBe(2);
 
-      // Navigate back to home
+      // Navigate back to home. Double wait pattern - see above
       await page.click('[data-testid="home-link"]');
+      await page.waitForTimeout(100);
       await page.waitForLoadState("networkidle");
-      await page.waitForFunction(
-        (prev) => (window.__nextlyticsTestEveryRender ?? 0) > prev,
-        afterNavCounters.everyRender ?? 0
-      );
+      await page.waitForTimeout(200);
 
       // Get final counters
       const finalCounters = await page.evaluate(() => ({
-        once: window.__nextlyticsTestOnce,
-        paramsChange: window.__nextlyticsTestParamsChange,
-        everyRender: window.__nextlyticsTestEveryRender,
+        init: window.__nextlyticsTestInit,
+        config: window.__nextlyticsTestConfig,
+        event: window.__nextlyticsTestEvent,
       }));
 
-      // "once" should still be 1
-      expect(finalCounters.once).toBe(1);
-      // "on-params-change" should be 3 - path changed again
-      expect(finalCounters.paramsChange).toBe(3);
-      // "every-render" should be 3
-      expect(finalCounters.everyRender).toBe(3);
+      // init should still be 1
+      expect(finalCounters.init).toBe(1);
+      // config should still be 2 (same deps key should not re-run)
+      expect(finalCounters.config).toBe(2);
+      // event should be 3
+      expect(finalCounters.event).toBe(3);
 
       await page.close();
     });

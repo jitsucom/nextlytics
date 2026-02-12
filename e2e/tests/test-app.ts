@@ -47,7 +47,33 @@ export class TestApp {
   async newPage(): Promise<Page> {
     const browser = await this.openBrowser();
     const context = await browser.newContext();
-    return context.newPage();
+    await context.addInitScript(() => {
+      try {
+        localStorage.setItem("nextlytics:debug", "true");
+      } catch {
+        // ignore
+      }
+    });
+    const page = await context.newPage();
+    page.on("console", (msg) => {
+      const text = msg.text();
+      console.log(`[browser:${msg.type()}]`, text);
+    });
+    page.on("request", (req) => {
+      const url = req.url();
+      if (url.includes("/api/event")) {
+        const postData = req.postData();
+        console.log("[e2e][request]", url, postData ?? "");
+      }
+    });
+    page.on("response", async (res) => {
+      const url = res.url();
+      if (url.includes("/api/event")) {
+        const body = await res.text().catch(() => "");
+        console.log("[e2e][response]", url, body);
+      }
+    });
+    return page;
   }
 
   async closeBrowser(): Promise<void> {

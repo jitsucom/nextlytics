@@ -5,18 +5,25 @@ import type { NextlyticsBackend } from "@nextlytics/core";
 import { auth } from "./auth";
 
 // Inline types for test backend (avoid import issues with workspace)
-type ScriptMode = "once" | "on-params-change" | "every-render";
-type ScriptElement = { async?: boolean; body?: string; src?: string; mode?: ScriptMode };
-type JavascriptTemplate = { items: ScriptElement[] };
+type ScriptElement = { async?: boolean; body?: string; src?: string };
+type JavascriptTemplate = {
+  items: ScriptElement[];
+  deps?: string | string[];
+};
 type ClientAction = {
   items: Array<{ type: "script-template"; templateId: string; params: unknown }>;
 };
 
-const CONSOLE_TEMPLATE_ID = "console-test";
+const CONSOLE_INIT_TEMPLATE_ID = "console-test-init";
+const CONSOLE_CONFIG_TEMPLATE_ID = "console-test-config";
+const CONSOLE_EVENT_TEMPLATE_ID = "console-test-event";
+const TEST_MEASUREMENT_ID = "TEST-MEASUREMENT-ID";
 
 /**
- * Test backend that injects console.log scripts with different modes.
- * Used to verify script injection behavior during soft navigation.
+ * Test backend that mirrors GA-like behavior:
+ * - init template (loader) runs once (measurementId is stable)
+ * - config template re-runs only when config changes
+ * - event template runs for every event
  */
 function consoleTestBackend(): NextlyticsBackend {
   return {
@@ -25,29 +32,35 @@ function consoleTestBackend(): NextlyticsBackend {
 
     getClientSideTemplates(): Record<string, JavascriptTemplate> {
       return {
-        [CONSOLE_TEMPLATE_ID]: {
+        [CONSOLE_INIT_TEMPLATE_ID]: {
+          deps: "{{measurementId}}",
           items: [
-            // mode: "once" - should only run once, even after soft navigation
             {
               body: [
-                "window.__nextlyticsTestOnce = (window.__nextlyticsTestOnce || 0) + 1;",
-                "console.log('[nextlytics-test] once:', window.__nextlyticsTestOnce);",
+                "window.__nextlyticsTestInit = (window.__nextlyticsTestInit || 0) + 1;",
+                "console.log('[nextlytics-test] init:', window.__nextlyticsTestInit);",
               ].join("\n"),
-              mode: "once",
             },
-            // mode: "on-params-change" - should run when params change
+          ],
+        },
+        [CONSOLE_CONFIG_TEMPLATE_ID]: {
+          deps: "{{stableHash(config)}}",
+          items: [
             {
               body: [
-                "window.__nextlyticsTestParamsChange = (window.__nextlyticsTestParamsChange || 0) + 1;",
-                "console.log('[nextlytics-test] on-params-change:', window.__nextlyticsTestParamsChange, 'path={{path}}');",
+                "window.__nextlyticsTestConfig = (window.__nextlyticsTestConfig || 0) + 1;",
+                "console.log('[nextlytics-test] config:', window.__nextlyticsTestConfig, {{json(config)}});",
               ].join("\n"),
-              mode: "on-params-change",
             },
-            // mode: "every-render" (default) - should run on every navigation
+          ],
+        },
+        [CONSOLE_EVENT_TEMPLATE_ID]: {
+          deps: "{{eventId}}",
+          items: [
             {
               body: [
-                "window.__nextlyticsTestEveryRender = (window.__nextlyticsTestEveryRender || 0) + 1;",
-                "console.log('[nextlytics-test] every-render:', window.__nextlyticsTestEveryRender);",
+                "window.__nextlyticsTestEvent = (window.__nextlyticsTestEvent || 0) + 1;",
+                "console.log('[nextlytics-test] event:', window.__nextlyticsTestEvent);",
               ].join("\n"),
             },
           ],
@@ -58,12 +71,25 @@ function consoleTestBackend(): NextlyticsBackend {
     async onEvent(event): Promise<ClientAction> {
       // Return script insertion for pageView events
       if (event.type === "pageView") {
+        const config = {
+          path: event.serverContext?.path || "/",
+        };
         return {
           items: [
             {
               type: "script-template",
-              templateId: CONSOLE_TEMPLATE_ID,
-              params: { path: event.serverContext?.path || "/" },
+              templateId: CONSOLE_INIT_TEMPLATE_ID,
+              params: { measurementId: TEST_MEASUREMENT_ID },
+            },
+            {
+              type: "script-template",
+              templateId: CONSOLE_CONFIG_TEMPLATE_ID,
+              params: { config },
+            },
+            {
+              type: "script-template",
+              templateId: CONSOLE_EVENT_TEMPLATE_ID,
+              params: { eventId: event.eventId, path: config.path },
             },
           ],
         };
@@ -92,8 +118,9 @@ const backends: BackendConfigEntry[] = [
   consoleTestBackend(),
 ];
 
-export const { middleware, analytics, Server } = Nextlytics({
+export const { middleware, analytics, NextlyticsServer } = Nextlytics({
   backends,
+  debug: true,
   callbacks: {
     async getUser() {
       const session = await auth();

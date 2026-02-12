@@ -1,6 +1,9 @@
 import type { NextRequest } from "next/server";
 import { after } from "next/server";
-import { headers as analyticsHeaders } from "./server-component-context";
+import {
+  LAST_PAGE_RENDER_ID_COOKIE,
+  headerNames as analyticsHeaders,
+} from "./server-component-context";
 import type {
   ClientContext,
   ClientRequest,
@@ -18,7 +21,7 @@ import { resolveAnonymousUser } from "./anonymous-user";
 export type DispatchEvent = (
   event: NextlyticsEvent,
   ctx: RequestContext,
-  policyFilter?: IngestPolicy
+  policyFilter?: IngestPolicy | "client-actions"
 ) => DispatchResult;
 
 export type UpdateEvent = (
@@ -29,6 +32,7 @@ export type UpdateEvent = (
 
 type HandlerContext = {
   pageRenderId: string;
+  isSoftNavigation: boolean;
   ctx: RequestContext;
   apiCallServerContext: ServerEventContext;
   userContext: UserContext | undefined;
@@ -101,7 +105,7 @@ async function handleClientInit(
     dispatchEvent,
     updateEvent,
   } = hctx;
-  const { clientContext, softNavigation } = request;
+  const { clientContext } = request;
   const serverContext = reconstructServerContext(apiCallServerContext, clientContext);
 
   const { anonId: anonymousUserId } = await resolveAnonymousUser({
@@ -110,10 +114,18 @@ async function handleClientInit(
     config,
   });
 
-  // Always dispatch to "on-client-event" backends (both hard and soft navigation)
+  // Dispatch on client-init to:
+  // - on-client-event backends (for delayed ingestion), and
+  // - any backend that returns client actions (to ensure scripts are sent on soft nav).
+  // Soft navigation keeps the same pageRenderId but needs a fresh eventId
+  // so client-side scripts depending on eventId can re-run per navigation.
+  const isSoftNavigation = hctx.isSoftNavigation;
+  const eventId = isSoftNavigation ? generateId() : pageRenderId;
+
   const event: NextlyticsEvent = {
     origin: "client",
-    eventId: pageRenderId,
+    eventId,
+    parentEventId: isSoftNavigation ? pageRenderId : undefined,
     type: "pageView",
     collectedAt: new Date().toISOString(),
     anonymousUserId,
@@ -123,7 +135,7 @@ async function handleClientInit(
     properties: {},
   };
 
-  const { clientActions, completion } = dispatchEvent(event, ctx, "on-client-event");
+  const { clientActions, completion } = dispatchEvent(event, ctx, "client-actions");
   const actions = await clientActions;
   after(() => completion);
 
@@ -135,7 +147,7 @@ async function handleClientInit(
   // so scripts must be returned from /api/event.
   return Response.json({
     ok: true,
-    items: softNavigation ? filterScripts(actions) : undefined,
+    items: isSoftNavigation ? filterScripts(actions) : undefined,
   });
 }
 
@@ -182,8 +194,10 @@ export async function handleEventPost(
   dispatchEvent: DispatchEvent,
   updateEvent: UpdateEvent
 ): Promise<Response> {
-  const pageRenderId = request.headers.get(analyticsHeaders.pageRenderId);
-  if (!pageRenderId) {
+  const softNavHeader = request.headers.get(analyticsHeaders.isSoftNavigation);
+  const isSoftNavigation = softNavHeader === "1";
+  const pageRenderIdHeader = request.headers.get(analyticsHeaders.pageRenderId);
+  if (!pageRenderIdHeader) {
     return Response.json({ error: "Missing page render ID" }, { status: 400 });
   }
 
@@ -198,8 +212,18 @@ export async function handleEventPost(
   const apiCallServerContext = createServerContext(request);
   const userContext = await getUserContext(config, ctx);
 
+  const cookiePageRenderId = request.cookies.get(LAST_PAGE_RENDER_ID_COOKIE)?.value;
+  const pageRenderId =
+    isSoftNavigation ? cookiePageRenderId ?? generateId() : pageRenderIdHeader;
+  if (isSoftNavigation && !cookiePageRenderId && config.debug) {
+    console.warn(
+      "[Nextlytics] Missing last-page-render-id cookie on soft navigation; using a new id."
+    );
+  }
+
   const hctx: HandlerContext = {
     pageRenderId,
+    isSoftNavigation,
     ctx,
     apiCallServerContext,
     userContext,

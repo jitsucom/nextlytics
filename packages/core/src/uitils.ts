@@ -51,19 +51,21 @@ export function getRequestInfo(request: NextRequest): RequestInfo {
     headers.get("sec-purpose") === "prefetch";
 
   // RSC prefetch heuristic using next-url header.
-  // When next-url is present and differs from request path, it indicates the request
-  // originated from a different page (prefetch during hover/viewport intersection).
+  // When next-url is present and differs from request path, it often indicates a prefetch
+  // (hover/viewport). However, in Next.js 16 App Router, real navigations can also carry
+  // next-url with a different pathname. That would incorrectly mark a real navigation as
+  // prefetch if we rely on next-url alone.
   //
-  // Warning: next-url is an undocumented internal header.
-  // See: https://github.com/vercel/next.js/issues/57762 (Lee Robinson: "not recommended")
-  // See: https://github.com/vercel/next.js/discussions/49824 (soft vs hard nav detection)
-  // See: https://github.com/vercel/next.js/discussions/37736 (prefetch detection workarounds)
-  const nextUrl = headers.get("next-url");
-  const isRscPrefetch = nextUrl !== null && nextUrl !== pathname;
-
-  const isPrefetch = hasStandardPrefetchHeader || isRscPrefetch;
-
+  // To avoid skipping real navigations, we only treat this as prefetch when the request
+  // is NOT a page navigation. This keeps true prefetches skipped while allowing RSC
+  // navigations to be counted as page views.
+  //
+  // References:
+  // - https://github.com/vercel/next.js/issues/57762 (next-url header is undocumented)
+  // - https://github.com/vercel/next.js/discussions/49824 (soft vs hard nav detection)
+  // - https://github.com/vercel/next.js/discussions/37736 (prefetch detection workarounds)
   // Check for RSC navigation (client-side Next.js navigation)
+  const nextUrl = headers.get("next-url");
   const isRsc = !!(nextUrl || headers.get("rsc"));
 
   // Check for standard document navigation
@@ -76,6 +78,9 @@ export function getRequestInfo(request: NextRequest): RequestInfo {
 
   // Page navigation = document request OR RSC navigation OR accepts HTML
   const isPageNavigation = isRsc || isDocumentRequest || acceptsHtml;
+
+  const isRscPrefetch = nextUrl !== null && nextUrl !== pathname;
+  const isPrefetch = hasStandardPrefetchHeader || (isRscPrefetch && !isPageNavigation);
 
   return {
     isPrefetch,

@@ -16,10 +16,10 @@ export function loggingBackend(): NextlyticsBackend {
     getClientSideTemplates(): Record<string, JavascriptTemplate> {
       return {
         [LOG_TEMPLATE_ID]: {
+          deps: "{{eventId}}",
           items: [
             {
               body: "console.log('[Nextlytics Log][client]', {{json(event)}});",
-              mode: "every-render",
             },
           ],
         },
@@ -42,6 +42,7 @@ export function loggingBackend(): NextlyticsBackend {
               type: "script-template",
               templateId: LOG_TEMPLATE_ID,
               params: {
+                eventId: event.eventId,
                 event: {
                   type: event.type,
                   eventProps: event.properties,
