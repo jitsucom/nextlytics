@@ -69,6 +69,13 @@ export interface UserContext {
 
 /** Analytics event sent to backends */
 export interface NextlyticsEvent {
+  /**
+   * Where the event was triggered?
+   *  - server — on server, e.g in route or server side component
+   *  - client — on client
+   */
+  origin: "server" | "client";
+
   /** ISO timestamp when event was collected */
   collectedAt: string;
   /** Unique event ID */
@@ -90,7 +97,7 @@ export interface NextlyticsEvent {
 }
 
 import type { RequestCookies } from "next/dist/server/web/spec-extension/cookies";
-import type { NextMiddleware, NextRequest } from "next/server";
+import type { NextMiddleware } from "next/server";
 
 export type AnonymousUserResult = {
   /** Anonymous user identifier */
@@ -116,18 +123,18 @@ export type NextlyticsPlugin = {
 /** Factory to create plugin per-request (for request-scoped plugins) */
 export type NextlyticsPluginFactory = (ctx: RequestContext) => NextlyticsPlugin;
 
-/** When to ingest events for a backend */
-export type IngestPolicy =
-  /** Dispatch immediately in middleware (default) - faster but no client context */
-  | "immediate"
-  /** Dispatch when client-init is received - has full client context (title, screen, etc) */
-  | "on-client-event";
+/** When to deliver page view events for a backend */
+export type PageViewDelivery =
+  /** Dispatch on server request in middleware (default) - faster but no client context */
+  | "on-request"
+  /** Dispatch on page load (client-side) - has full client context (title, screen, etc) */
+  | "on-page-load";
 
 /** Backend with configuration options */
 export type BackendWithConfig = {
   backend: NextlyticsBackend | NextlyticsBackendFactory;
-  /** When to send events. Default: "immediate" */
-  ingestPolicy?: IngestPolicy;
+  /** When to send events. Default: "on-request" */
+  pageViewDelivery?: PageViewDelivery;
 };
 
 /** Backend config entry - either a backend directly or with config */
@@ -197,14 +204,18 @@ export type DispatchResult = {
 
 export type JavascriptTemplate = {
   items: ScriptElement[];
+  /**
+   * Optional dependency key template. When this value changes, the script re-injects.
+   * If omitted, the template is treated as "once".
+   */
+  deps?: string | string[];
 };
 
 export type ScriptElement = {
-  async?: string;
-  body?: string;
+  async?: boolean;
+  //string[] means multiple lines, for convinience
+  body?: string | string[];
   src?: string;
-  /** If true, skip insertion if script with same src already exists */
-  singleton?: boolean;
 };
 
 /** Backend that receives analytics events */
@@ -221,7 +232,7 @@ export type NextlyticsBackend = {
   getClientSideTemplates?: () => Record<string, JavascriptTemplate>;
 
   /** Handle new event */
-  onEvent(event: NextlyticsEvent): Promise<void | ClientAction>;
+  onEvent(event: NextlyticsEvent): Promise<ClientAction | void | undefined>;
   /** Update existing event (e.g. add client context to server pageView) */
   updateEvent(eventId: string, patch: Partial<NextlyticsEvent>): Promise<void> | void;
 };
@@ -238,12 +249,44 @@ export type NextlyticsServerSide = {
   ) => Promise<{ ok: boolean }>;
 };
 
-type AppRouteHandlers = Record<"GET" | "POST", (req: NextRequest) => Promise<Response>>;
+/** Context for Pages Router _app.tsx */
+export type PagesRouterContext = {
+  req: { headers: Record<string, string | string[] | undefined>; cookies?: Record<string, string> };
+};
+
+/** Context passed to NextlyticsClient */
+export type NextlyticsClientContext = {
+  requestId: string;
+  scripts?: TemplatizedScriptInsertion<unknown>[];
+  templates?: Record<string, JavascriptTemplate>;
+};
+
+/** Client-to-server request types (discriminated union) */
+export type ClientRequest =
+  | {
+      type: "page-view";
+      clientContext: ClientContext;
+      /** If true, only update existing event (soft navigation - no dispatch, no scripts) */
+      softNavigation?: boolean;
+    }
+  | {
+      type: "custom-event";
+      name: string;
+      props?: Record<string, unknown>;
+      collectedAt: string;
+      clientContext: ClientContext;
+    };
+
+/**
+ * Result of any /api/event call
+ */
+export type ClientRequestResult = {
+  ok: boolean;
+  items?: ClientActionItem[];
+};
 
 /** Return value from Nextlytics() */
 export type NextlyticsResult = {
-  /** Route handlers for /api/event */
-  handlers: AppRouteHandlers;
   /** Get server-side analytics API */
   analytics: () => Promise<NextlyticsServerSide>;
   /** Middleware to intercept requests */
@@ -252,4 +295,6 @@ export type NextlyticsResult = {
   dispatchEvent: (event: NextlyticsEvent) => Promise<DispatchResult>;
   /** Manually update existing event */
   updateEvent: (eventId: string, patch: Partial<NextlyticsEvent>) => Promise<void>;
+  /** Server component that wraps your app to provide analytics context (App Router) */
+  NextlyticsServer: (props: { children: React.ReactNode }) => Promise<React.ReactElement>;
 };

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { headers, cookies } from "next/headers";
 import { removeSensitiveHeaders } from "./headers";
 import {
-  headers as analyticsHeaders,
+  headerNames,
   restoreServerComponentContext,
 } from "./server-component-context";
 import { resolveAnonymousUser } from "./anonymous-user";
@@ -11,7 +11,8 @@ import type {
   BackendWithConfig,
   ClientAction,
   DispatchResult,
-  IngestPolicy,
+  PageViewDelivery,
+  JavascriptTemplate,
   NextlyticsBackend,
   NextlyticsBackendFactory,
   NextlyticsConfig,
@@ -21,39 +22,55 @@ import type {
   RequestContext,
   ServerEventContext,
 } from "./types";
-import { createHandlers } from "./handlers";
 import { logConfigWarnings, validateConfig, withDefaults } from "./config-helpers";
 import { createNextlyticsMiddleware } from "./middleware";
 import { generateId } from "./uitils";
 
 type ResolvedBackend = {
   backend: NextlyticsBackend;
-  ingestPolicy: IngestPolicy;
+  pageViewDelivery: PageViewDelivery;
 };
+
+/**
+ * Filter for resolveBackends():
+ * - PageViewDelivery value: return only backends with that delivery mode
+ * - "client-actions": return on-page-load backends + any backend with returnsClientActions
+ */
+type PolicyFilter = PageViewDelivery | "client-actions";
 
 function isBackendWithConfig(entry: unknown): entry is BackendWithConfig {
   return typeof entry === "object" && entry !== null && "backend" in entry;
 }
 
+/**
+ * Resolve backend config entries into concrete backends with their delivery mode.
+ * Optionally filter by PolicyFilter — see PolicyFilter type for semantics.
+ */
 function resolveBackends(
   config: NextlyticsConfig,
   ctx: RequestContext,
-  policyFilter?: IngestPolicy
+  policyFilter?: PolicyFilter
 ): ResolvedBackend[] {
   const entries = config.backends || [];
   return entries
     .map((entry): ResolvedBackend | null => {
       if (isBackendWithConfig(entry)) {
         const backend = typeof entry.backend === "function" ? entry.backend(ctx) : entry.backend;
-        return backend ? { backend, ingestPolicy: entry.ingestPolicy ?? "immediate" } : null;
+        return backend ? { backend, pageViewDelivery: entry.pageViewDelivery ?? "on-request" } : null;
       }
-      // Plain backend or factory - default to immediate
+      // Plain backend or factory - default to on-request
       const backend =
         typeof entry === "function" ? (entry as NextlyticsBackendFactory)(ctx) : entry;
-      return backend ? { backend, ingestPolicy: "immediate" } : null;
+      return backend ? { backend, pageViewDelivery: "on-request" } : null;
     })
     .filter((b): b is ResolvedBackend => b !== null)
-    .filter((b) => !policyFilter || b.ingestPolicy === policyFilter);
+    .filter((b) => {
+      if (!policyFilter) return true;
+      if (policyFilter === "client-actions") {
+        return b.pageViewDelivery === "on-page-load" || b.backend.returnsClientActions;
+      }
+      return b.pageViewDelivery === policyFilter;
+    });
 }
 
 function resolvePlugins(config: NextlyticsConfig, ctx: RequestContext): NextlyticsPlugin[] {
@@ -90,23 +107,21 @@ export async function createRequestContext(): Promise<RequestContext> {
   };
 }
 
-export async function NextlyticsServer({ children }: { children: ReactNode }) {
-  const headersList = await headers();
-  const ctx = restoreServerComponentContext(headersList);
-
-  if (!ctx) {
-    console.warn(
-      "[Nextlytics] nextlyticsMiddleware should be added in order for NextlyticsServer to work"
-    );
-    return <>{children}</>;
+/** Collect templates from all backends */
+function collectTemplates(
+  config: NextlyticsConfig,
+  ctx: RequestContext
+): Record<string, JavascriptTemplate> {
+  const templates: Record<string, JavascriptTemplate> = {};
+  const backends = resolveBackends(config, ctx);
+  for (const { backend } of backends) {
+    if (backend.getClientSideTemplates) {
+      Object.assign(templates, backend.getClientSideTemplates());
+    }
   }
-
-  return (
-    <NextlyticsClient requestId={ctx.pageRenderId} scripts={ctx.scripts} templates={ctx.templates}>
-      {children}
-    </NextlyticsClient>
-  );
+  return templates;
 }
+
 
 export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
   const config = withDefaults(userConfig);
@@ -118,7 +133,7 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
   const dispatchEventInternal = (
     event: NextlyticsEvent,
     ctx: RequestContext,
-    policyFilter?: IngestPolicy
+    policyFilter?: PolicyFilter
   ): DispatchResult => {
     const plugins = resolvePlugins(config, ctx);
     const resolved = resolveBackends(config, ctx, policyFilter);
@@ -183,8 +198,8 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     patch: Partial<NextlyticsEvent>,
     ctx: RequestContext
   ): Promise<void> => {
-    // Only update "immediate" backends that support updates
-    const resolved = resolveBackends(config, ctx, "immediate").filter(
+    // Only update "on-request" backends that support updates
+    const resolved = resolveBackends(config, ctx, "on-request").filter(
       ({ backend }) => backend.supportsUpdates
     );
     const results = await Promise.all(
@@ -221,12 +236,32 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
   };
 
   const middleware = createNextlyticsMiddleware(config, dispatchEventInternal, updateEventInternal);
-  const handlers = createHandlers();
+
+  /** Server component that provides analytics context to the app */
+  async function Server({ children }: { children: ReactNode }) {
+    const headersList = await headers();
+    const ctx = restoreServerComponentContext(headersList);
+
+    if (!ctx) {
+      console.warn("[Nextlytics] nextlyticsMiddleware should be added in order for Server to work");
+      return <>{children}</>;
+    }
+
+    // Get templates directly from backends (config is captured in closure)
+    const requestCtx = await createRequestContext();
+    const templates = collectTemplates(config, requestCtx);
+
+    return (
+      <NextlyticsClient ctx={{ requestId: ctx.pageRenderId, scripts: ctx.scripts, templates }}>
+        {children}
+      </NextlyticsClient>
+    );
+  }
 
   const analytics = async () => {
     const headersList = await headers();
     const cookieStore = await cookies();
-    const pageRenderId = headersList.get(analyticsHeaders.pageRenderId);
+    const pageRenderId = headersList.get(headerNames.pageRenderId);
 
     const serverContext = createServerContextFromHeaders(headersList);
     const ctx: RequestContext = { headers: headersList, cookies: cookieStore };
@@ -255,6 +290,7 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
         }
 
         const event: NextlyticsEvent = {
+          origin: "server",
           eventId: generateId(),
           parentEventId: pageRenderId,
           type: eventName,
@@ -271,7 +307,13 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     };
   };
 
-  return { middleware, handlers, analytics, dispatchEvent, updateEvent };
+  return {
+    middleware,
+    analytics,
+    dispatchEvent,
+    updateEvent,
+    NextlyticsServer: Server,
+  };
 }
 
 function createServerContextFromHeaders(
@@ -283,8 +325,8 @@ function createServerContextFromHeaders(
   });
   const requestHeaders = removeSensitiveHeaders(rawHeaders);
 
-  const pathname = headersList.get(analyticsHeaders.pathname) || "";
-  const search = headersList.get(analyticsHeaders.search) || "";
+  const pathname = headersList.get(headerNames.pathname) || "";
+  const search = headersList.get(headerNames.search) || "";
   const searchParams: Record<string, string[]> = {};
 
   if (search) {

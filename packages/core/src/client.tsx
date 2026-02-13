@@ -1,9 +1,26 @@
 "use client";
 
-import { useEffect, useCallback, createContext, useContext, type ReactNode } from "react";
-import type { ClientContext, JavascriptTemplate, TemplatizedScriptInsertion } from "./types";
-import { headers } from "./server-component-context";
-import { compile, apply, type CompiledTemplate, type TemplateFunctions } from "./template";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+} from "react";
+import { useNavigation, debug, InjectScript, type InjectScriptProps } from "./client-utils";
+import type {
+  ClientContext,
+  ClientRequest,
+  ClientRequestResult,
+  JavascriptTemplate,
+  TemplatizedScriptInsertion,
+} from "./types";
+import { headerNames } from "./server-component-context";
+import { apply, compile, type TemplateFunctions } from "./template";
+import {stableHash} from "./stable-hash";
 
 /** Context object for Pages Router integration */
 export type NextlyticsContext = {
@@ -15,13 +32,15 @@ export type NextlyticsContext = {
 const templateFunctions: TemplateFunctions = {
   q: (v) => JSON.stringify(v ?? null),
   json: (v) => JSON.stringify(v ?? null),
+  stableHash: (v) => stableHash(v as any)
 };
-// Cache compiled templates to avoid recompiling
-const compiledCache: Record<string, { src?: CompiledTemplate; body?: CompiledTemplate }> = {};
 
 type NextlyticsContextValue = {
   requestId: string;
   templates: Record<string, JavascriptTemplate>;
+  addScripts: (scripts: TemplatizedScriptInsertion<unknown>[]) => void;
+  scriptsRef: React.MutableRefObject<TemplatizedScriptInsertion<unknown>[]>;
+  subscribersRef: React.MutableRefObject<Set<() => void>>;
 };
 
 const NextlyticsContext = createContext<NextlyticsContextValue | null>(null);
@@ -49,146 +68,241 @@ function createClientContext(): ClientContext {
   };
 }
 
-/** Get or compile template items */
-function getCompiledTemplate(
-  templateId: string,
-  itemIndex: number,
-  item: { src?: string; body?: string }
-): { src?: CompiledTemplate; body?: CompiledTemplate } {
-  const cacheKey = `${templateId}:${itemIndex}`;
-  if (!compiledCache[cacheKey]) {
-    compiledCache[cacheKey] = {
-      src: item.src ? compile(item.src) : undefined,
-      body: item.body ? compile(item.body) : undefined,
-    };
-  }
-  return compiledCache[cacheKey];
-}
+type CompiledScript = InjectScriptProps & { key: string };
 
-/** Execute templated scripts */
-function executeTemplatedScripts(
-  scripts: TemplatizedScriptInsertion<unknown>[] | undefined,
+/**
+ * Deduplicate script insertions by template id + deps.
+ *
+ * Why this exists:
+ * - The same template can arrive twice (SSR headers + page-view response).
+ *
+ * Behavior:
+ * - If a template has no deps, keep ALL instances (like useEffect without deps).
+ * - If a template has deps, keep the FIRST instance for each deps key.
+ *   (prevents duplicates while still allowing distinct dep values)
+ *
+ * Only script-template entries are expected; other types are ignored.
+ */
+function deduplicateScripts(
+  scripts: TemplatizedScriptInsertion<unknown>[],
   templates: Record<string, JavascriptTemplate>
-) {
-  if (!scripts || typeof window === "undefined") return;
+): TemplatizedScriptInsertion<unknown>[] {
+  const result: TemplatizedScriptInsertion<unknown>[] = [];
+  const firstSeenByDeps = new Set<string>();
 
   for (const script of scripts) {
-    if (script.type !== "script-template") {
-      console.warn(`[Nextlytics] unsupported script type ${script.type} `);
+    if (script.type !== "script-template") continue;
+    const template = templates[script.templateId];
+    if (!template) continue;
+
+    if (!template.deps) {
+      result.push(script);
       continue;
     }
 
+    const paramsRecord = (script.params || {}) as Record<string, unknown>;
+    const deps = compileTemplateDeps(template, paramsRecord);
+    const depsKey = `${script.templateId}\0${deps.join("\0")}`;
+    if (firstSeenByDeps.has(depsKey)) continue;
+    firstSeenByDeps.add(depsKey);
+    result.push(script);
+  }
+
+  return result;
+}
+
+/**
+ * Compile scripts from templates into InjectScriptProps.
+ * Assumes the input is already deduplicated.
+ */
+function compileScripts(
+  scripts: TemplatizedScriptInsertion<unknown>[],
+  templates: Record<string, JavascriptTemplate>
+): CompiledScript[] {
+  const result: CompiledScript[] = [];
+
+  for (const [scriptIndex, script] of scripts.entries()) {
+    if (script.type !== "script-template") continue;
     const template = templates[script.templateId];
     if (!template) {
-      console.warn(`[Nextlytics] Missing template: ${script.templateId}`);
+      console.warn(`[Nextlytics] Template "${script.templateId}" not found`);
       continue;
     }
 
-    const params = script.params as Record<string, unknown>;
+    const paramsRecord = (script.params || {}) as Record<string, unknown>;
+    const deps = compileTemplateDeps(template, paramsRecord);
+    let itemIndex = 0;
 
-    // Execute each script element in the template
-    for (let i = 0; i < template.items.length; i++) {
-      const item = template.items[i];
-      const compiled = getCompiledTemplate(script.templateId, i, item);
+    for (const item of template.items) {
+      const keyPrefix = `${script.templateId}:${scriptIndex}:${item.src ? "ext" : "body"}:${itemIndex}`;
 
-      const src = compiled.src ? apply(compiled.src, params, templateFunctions) : undefined;
-
-      // Skip if singleton and script with same src already exists
-      if (item.singleton && src && document.querySelector(`script[src="${src}"]`)) {
+      if (item.src) {
+        const compiledSrc = compile(item.src);
+        const src = apply(compiledSrc, paramsRecord, templateFunctions);
+        result.push({
+          key: keyPrefix,
+          src,
+          async: item.async,
+          deps,
+        });
+        itemIndex++;
         continue;
       }
 
-      const el = document.createElement("script");
-      if (src) {
-        el.src = src;
-      }
-      if (compiled.body) {
-        el.textContent = apply(compiled.body, params, templateFunctions);
-      }
-      if (item.async) {
-        el.async = true;
+      if (!item.body) {
+        itemIndex++;
+        continue;
       }
 
-      document.head.appendChild(el);
+      const bodyText = Array.isArray(item.body) ? item.body.join("\n") : item.body;
+      const compiled = compile(bodyText);
+      const body = apply(compiled, paramsRecord, templateFunctions);
+
+      result.push({ key: keyPrefix, body, deps });
+      itemIndex++;
     }
   }
+
+  return result;
 }
 
-type SendEventResult = {
-  ok: boolean;
-  scripts?: TemplatizedScriptInsertion<unknown>[];
-};
+function compileTemplateDeps(
+  template: JavascriptTemplate,
+  paramsRecord: Record<string, unknown>
+): string[] {
+  if (!template.deps) return [];
+  const rawDeps = Array.isArray(template.deps) ? template.deps : [template.deps];
+  return rawDeps.map((dep) => apply(compile(dep), paramsRecord, templateFunctions));
+}
 
-async function sendEvent(
+/** Renders initial scripts (from SSR) and dynamic scripts (from sendEvent calls) */
+function NextlyticsScripts({
+  initialScripts,
+}: {
+  initialScripts: TemplatizedScriptInsertion<unknown>[];
+}) {
+  const context = useContext(NextlyticsContext);
+  if (!context) {
+    throw new Error("NextlyticsScripts should be called within NextlyticsContext");
+  }
+
+  const { scriptsRef, subscribersRef, templates } = context;
+  const [, forceUpdate] = useReducer((x) => x + 1, 0);
+
+  // Subscribe to dynamic script changes
+  useEffect(() => {
+    subscribersRef.current.add(forceUpdate);
+    return () => {
+      subscribersRef.current.delete(forceUpdate);
+    };
+  }, [subscribersRef]);
+
+  const allScripts = [...initialScripts, ...scriptsRef.current];
+  const dedupedScripts = useMemo(
+    () => deduplicateScripts(allScripts, templates),
+    [allScripts, templates]
+  );
+  // Compile all scripts into InjectScriptProps
+  const compiled = useMemo(
+    () => compileScripts(dedupedScripts, templates),
+    [dedupedScripts, templates]
+  );
+
+  debug("Rendering scripts", {
+    initialCount: initialScripts.length,
+    dynamicCount: scriptsRef.current.length,
+    totalCount: allScripts.length,
+    compiledCount: compiled.length,
+  });
+
+  return (
+    <>
+      {compiled.map(({ key, ...props }) => (
+        <InjectScript key={key} {...props} />
+      ))}
+    </>
+  );
+}
+
+async function sendEventToServer(
   requestId: string,
-  type: string,
-  payload: Record<string, unknown>
-): Promise<SendEventResult> {
+  request: ClientRequest,
+  { signal, isSoftNavigation }: { signal?: AbortSignal; isSoftNavigation?: boolean } = {}
+): Promise<ClientRequestResult> {
   try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      [headerNames.pageRenderId]: requestId,
+    } ;
+    if (isSoftNavigation) {
+      headers[headerNames.isSoftNavigation] = "1";
+    }
     const response = await fetch("/api/event", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        [headers.pageRenderId]: requestId,
-      },
-      body: JSON.stringify({ type, payload }),
+      headers,
+      body: JSON.stringify(request),
+      signal,
     });
 
     if (response.status === 404) {
       console.error(
-        "[Nextlytics] In order for NextlyticsClient to work, you must mount nextlyticsRouteHandler to /api/event"
+        "[Nextlytics] In order for NextlyticsClient to work, you must install nextlytics middleware"
       );
       return { ok: false };
     }
 
     // Parse response to get scripts
     const data = await response.json().catch(() => ({ ok: response.ok }));
-    return { ok: data.ok ?? response.ok, scripts: data.scripts };
+    return { ok: data.ok ?? response.ok, items: data.items };
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return { ok: false };
+    }
     console.error("[Nextlytics] Failed to send event:", error);
     return { ok: false };
   }
 }
 
-// Track which requestIds have been initialized to handle soft navigations
-const initializedRequestIds = new Set<string>();
+export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: ReactNode }) {
+  const { requestId, scripts: initialScripts = [], templates = {} } = props.ctx;
 
-export function NextlyticsClient(props: {
-  ctx?: NextlyticsContext;
-  requestId?: string;
-  scripts?: TemplatizedScriptInsertion<unknown>[];
-  templates?: Record<string, JavascriptTemplate>;
-  children?: ReactNode;
-}) {
-  // Resolve from ctx or individual props
-  const requestId = props.ctx?.requestId ?? props.requestId ?? "";
-  const scripts = props.ctx?.scripts ?? props.scripts;
-  const templates = props.ctx?.templates ?? props.templates ?? {};
+  // Refs for dynamic scripts (from sendEvent calls) - stable, no re-renders
+  const scriptsRef = useRef<TemplatizedScriptInsertion<unknown>[]>([]);
+  const subscribersRef = useRef<Set<() => void>>(new Set());
 
-  useEffect(() => {
-    // Skip if already initialized for this requestId
-    if (initializedRequestIds.has(requestId)) return;
-    initializedRequestIds.add(requestId);
+  const addScripts = useCallback((newScripts: TemplatizedScriptInsertion<unknown>[]) => {
+    debug("Adding scripts", {
+      newCount: newScripts.length,
+      templateIds: newScripts.map((s) => s.templateId),
+    });
+    scriptsRef.current = [...scriptsRef.current, ...newScripts];
+    subscribersRef.current.forEach((cb) => cb());
+  }, []);
 
-    // Execute scripts from server (pageView)
-    if (scripts && Object.keys(templates).length > 0) {
-      executeTemplatedScripts(scripts, templates);
-    }
+  // Context value is stable - refs don't change identity
+  const contextValue = useMemo<NextlyticsContextValue>(
+    () => ({ requestId, templates, addScripts, scriptsRef, subscribersRef }),
+    [requestId, templates, addScripts]
+  );
 
-    // Send client-init and execute any returned scripts
+  // Send page-view on mount and soft navigations
+  useNavigation(requestId, ({ softNavigation, signal }) => {
+    debug("Sending page-view", { requestId, softNavigation });
     const clientContext = createClientContext();
-    sendEvent(requestId, "client-init", clientContext as unknown as Record<string, unknown>).then(
-      ({ scripts: responseScripts }) => {
-        if (responseScripts) {
-          executeTemplatedScripts(responseScripts, templates);
-        }
-      }
-    );
-  }, [requestId, scripts, templates]);
+    sendEventToServer(
+      requestId,
+      { type: "page-view", clientContext, softNavigation: softNavigation || undefined },
+      { signal, isSoftNavigation: softNavigation }
+    ).then(({ items }) => {
+      debug("page-view response", { scriptsCount: items?.length ?? 0 });
+      if (items?.length) addScripts(items);
+    });
+  });
 
   return (
-    <NextlyticsContext.Provider value={{ requestId, templates }}>
+    <NextlyticsContext.Provider value={contextValue}>
       {props.children}
+      <NextlyticsScripts initialScripts={initialScripts} />
     </NextlyticsContext.Provider>
   );
 }
@@ -210,29 +324,29 @@ export function useNextlytics(): NextlyticsClientApi {
     );
   }
 
-  const { requestId, templates } = context;
+  const { requestId, addScripts } = context;
 
-  const send = useCallback(
+  const sendEvent = useCallback(
     async (
       eventName: string,
       opts?: { props?: Record<string, unknown> }
     ): Promise<{ ok: boolean }> => {
-      const result = await sendEvent(requestId, "client-event", {
+      const result = await sendEventToServer(requestId, {
+        type: "custom-event",
         name: eventName,
         props: opts?.props,
         collectedAt: new Date().toISOString(),
         clientContext: createClientContext(),
       });
 
-      // Execute any scripts returned from the event
-      if (result.scripts) {
-        executeTemplatedScripts(result.scripts, templates);
+      if (result.items && result.items.length > 0) {
+        addScripts(result.items);
       }
 
       return { ok: result.ok };
     },
-    [requestId, templates]
+    [requestId, addScripts]
   );
 
-  return { sendEvent: send };
+  return { sendEvent };
 }

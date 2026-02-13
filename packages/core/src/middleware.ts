@@ -1,17 +1,7 @@
 import type { NextMiddleware, NextRequest } from "next/server";
 import { NextResponse, after } from "next/server";
-import {
-  headers as analyticsHeaders,
-  serializeServerComponentContext,
-} from "./server-component-context";
+import { LAST_PAGE_RENDER_ID_COOKIE, serializeServerComponentContext } from "./server-component-context";
 import type {
-  BackendWithConfig,
-  ClientContext,
-  DispatchResult,
-  IngestPolicy,
-  JavascriptTemplate,
-  NextlyticsBackend,
-  NextlyticsBackendFactory,
   NextlyticsEvent,
   RequestContext,
   ServerEventContext,
@@ -21,57 +11,12 @@ import type {
 import type { NextlyticsConfigWithDefaults } from "./config-helpers";
 import { generateId, getRequestInfo, createServerContext } from "./uitils";
 import { resolveAnonymousUser } from "./anonymous-user";
-
-type DispatchEvent = (
-  event: NextlyticsEvent,
-  ctx: RequestContext,
-  policyFilter?: IngestPolicy
-) => DispatchResult;
-type UpdateEvent = (
-  eventId: string,
-  patch: Partial<NextlyticsEvent>,
-  ctx: RequestContext
-) => Promise<void>;
-
-type ResolvedBackend = {
-  backend: NextlyticsBackend;
-  ingestPolicy: IngestPolicy;
-};
-
-function isBackendWithConfig(entry: unknown): entry is BackendWithConfig {
-  return typeof entry === "object" && entry !== null && "backend" in entry;
-}
-
-/** Resolve backend factories to actual backends with their policies */
-function resolveBackends(
-  config: NextlyticsConfigWithDefaults,
-  ctx: RequestContext
-): ResolvedBackend[] {
-  const entries = config.backends || [];
-  return entries
-    .map((entry): ResolvedBackend | null => {
-      if (isBackendWithConfig(entry)) {
-        const backend = typeof entry.backend === "function" ? entry.backend(ctx) : entry.backend;
-        return backend ? { backend, ingestPolicy: entry.ingestPolicy ?? "immediate" } : null;
-      }
-      // Plain backend or factory - default to immediate
-      const backend =
-        typeof entry === "function" ? (entry as NextlyticsBackendFactory)(ctx) : entry;
-      return backend ? { backend, ingestPolicy: "immediate" } : null;
-    })
-    .filter((b): b is ResolvedBackend => b !== null);
-}
-
-/** Collect script templates from all backends */
-function collectTemplates(backends: ResolvedBackend[]): Record<string, JavascriptTemplate> {
-  const templates: Record<string, JavascriptTemplate> = {};
-  for (const { backend } of backends) {
-    if (backend.getClientSideTemplates) {
-      Object.assign(templates, backend.getClientSideTemplates());
-    }
-  }
-  return templates;
-}
+import {
+  handleEventPost,
+  getUserContext,
+  type DispatchEvent,
+  type UpdateEvent,
+} from "./api-handler";
 
 function createRequestContext(request: NextRequest): RequestContext {
   return {
@@ -90,6 +35,27 @@ export function createNextlyticsMiddleware(
   return async (request) => {
     const pathname = request.nextUrl.pathname;
     const reqInfo = getRequestInfo(request);
+    const middlewareDebug =
+      config.debug || process.env.NEXTLYTICS_MIDDLEWARE_DEBUG === "true";
+
+    if (middlewareDebug) {
+      const headers = request.headers;
+      const debugHeaders: Record<string, string> = {};
+      headers.forEach((value, key) => {
+        debugHeaders[key] = value;
+      });
+
+      console.log("[Nextlytics][middleware]", {
+        pathname,
+        method: request.method,
+        isPrefetch: reqInfo.isPrefetch,
+        isRsc: reqInfo.isRsc,
+        isPageNavigation: reqInfo.isPageNavigation,
+        isStaticFile: reqInfo.isStaticFile,
+        isNextjsInternal: reqInfo.isNextjsInternal,
+        headers: debugHeaders,
+      });
+    }
 
     // Handle event endpoint directly in middleware
     if (pathname === eventEndpoint) {
@@ -108,13 +74,10 @@ export function createNextlyticsMiddleware(
     const serverContext = createServerContext(request);
     const response = NextResponse.next();
     const ctx = createRequestContext(request);
+    response.cookies.set(LAST_PAGE_RENDER_ID_COOKIE, pageRenderId, { path: "/" });
 
     // Resolve anonymous user ID (sets cookie if needed)
     const { anonId } = await resolveAnonymousUser({ ctx, serverContext, config, response });
-
-    // Collect templates from backends
-    const backends = resolveBackends(config, ctx);
-    const templates = collectTemplates(backends);
 
     // Check if path should be excluded
     if (config.excludePaths?.(pathname)) {
@@ -123,7 +86,6 @@ export function createNextlyticsMiddleware(
         pathname: request.nextUrl.pathname,
         search: request.nextUrl.search,
         scripts: [],
-        templates,
       });
       return response;
     }
@@ -136,7 +98,6 @@ export function createNextlyticsMiddleware(
         pathname: request.nextUrl.pathname,
         search: request.nextUrl.search,
         scripts: [],
-        templates,
       });
       return response;
     }
@@ -150,8 +111,8 @@ export function createNextlyticsMiddleware(
       anonId
     );
 
-    // Dispatch to "immediate" backends only - "on-client-event" backends dispatch later
-    const { clientActions, completion } = dispatchEvent(pageViewEvent, ctx, "immediate");
+    // Dispatch to "on-request" backends only - "on-page-load" backends dispatch later
+    const { clientActions, completion } = dispatchEvent(pageViewEvent, ctx, "on-request");
     const actions = await clientActions;
 
     // Extract script-template actions
@@ -162,13 +123,12 @@ export function createNextlyticsMiddleware(
     // Defer full completion to after response
     after(() => completion);
 
-    // Serialize context to headers
+    // Serialize context to headers (templates come from config in NextlyticsServer)
     serializeServerComponentContext(response, {
       pageRenderId,
       pathname: request.nextUrl.pathname,
       search: request.nextUrl.search,
       scripts,
-      templates,
     });
 
     return response;
@@ -184,6 +144,7 @@ function createPageViewEvent(
 ): NextlyticsEvent {
   const eventType = isApiPath ? "apiCall" : "pageView";
   return {
+    origin: "server",
     collectedAt: serverContext.collectedAt.toISOString(),
     eventId: pageRenderId,
     type: eventType,
@@ -192,137 +153,4 @@ function createPageViewEvent(
     userContext,
     properties: {},
   };
-}
-
-async function getUserContext(
-  config: NextlyticsConfigWithDefaults,
-  ctx: RequestContext
-): Promise<UserContext | undefined> {
-  if (!config.callbacks.getUser) return undefined;
-  try {
-    return (await config.callbacks.getUser(ctx)) || undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-type ClientInitPayload = ClientContext;
-
-/**
- * Reconstruct proper ServerEventContext from /api/event request + client data.
- * The /api/event call has its own server context (pointing to /api/event),
- * but we need to reconstruct the original page's context using client data.
- */
-function reconstructServerContext(
-  apiCallContext: ServerEventContext,
-  clientInit: ClientInitPayload
-): ServerEventContext {
-  // Parse search params from client's search string
-  const searchParams: Record<string, string[]> = {};
-  if (clientInit.search) {
-    const params = new URLSearchParams(clientInit.search);
-    params.forEach((value, key) => {
-      if (!searchParams[key]) searchParams[key] = [];
-      searchParams[key].push(value);
-    });
-  }
-
-  return {
-    ...apiCallContext,
-    // Override with client-provided values
-    host: clientInit.host || apiCallContext.host,
-    path: clientInit.path || apiCallContext.path,
-    search: Object.keys(searchParams).length > 0 ? searchParams : apiCallContext.search,
-    method: "GET", // Page loads are always GET
-  };
-}
-
-async function handleEventPost(
-  request: NextRequest,
-  config: NextlyticsConfigWithDefaults,
-  dispatchEvent: DispatchEvent,
-  updateEvent: UpdateEvent
-): Promise<Response> {
-  const pageRenderId = request.headers.get(analyticsHeaders.pageRenderId);
-  if (!pageRenderId) {
-    return Response.json({ error: "Missing page render ID" }, { status: 400 });
-  }
-
-  let body: { type: string; payload: Record<string, unknown> };
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const { type, payload } = body;
-
-  const ctx = createRequestContext(request);
-  const apiCallServerContext = createServerContext(request);
-  const userContext = await getUserContext(config, ctx);
-
-  if (type === "client-init") {
-    const clientContext = payload as unknown as ClientInitPayload;
-    const serverContext = reconstructServerContext(apiCallServerContext, clientContext);
-
-    const { anonId: anonymousUserId } = await resolveAnonymousUser({
-      ctx,
-      serverContext,
-      config,
-    });
-
-    // Dispatch to "on-client-event" backends (they didn't get the pageView in middleware)
-    const event: NextlyticsEvent = {
-      eventId: pageRenderId,
-      type: "pageView",
-      collectedAt: new Date().toISOString(),
-      anonymousUserId,
-      serverContext,
-      clientContext,
-      userContext,
-      properties: {},
-    };
-    const { clientActions, completion } = dispatchEvent(event, ctx, "on-client-event");
-    const actions = await clientActions;
-    after(() => completion);
-
-    // Also update "immediate" backends with client context
-    after(() => updateEvent(pageRenderId, { clientContext, userContext, anonymousUserId }, ctx));
-
-    // Filter to script-template only
-    const scripts = actions.items.filter((i) => i.type === "script-template");
-    return Response.json({ ok: true, scripts: scripts.length > 0 ? scripts : undefined });
-  } else if (type === "client-event") {
-    const clientContext = (payload.clientContext as ClientContext) || undefined;
-    const serverContext = clientContext
-      ? reconstructServerContext(apiCallServerContext, clientContext)
-      : apiCallServerContext;
-
-    const { anonId: anonymousUserId } = await resolveAnonymousUser({
-      ctx,
-      serverContext,
-      config,
-    });
-
-    const event: NextlyticsEvent = {
-      eventId: generateId(),
-      parentEventId: pageRenderId,
-      type: (payload.name as string) || type,
-      collectedAt: (payload.collectedAt as string) || new Date().toISOString(),
-      anonymousUserId,
-      serverContext,
-      clientContext,
-      userContext,
-      properties: (payload.props as Record<string, unknown>) || {},
-    };
-    // Client events go to all backends
-    const { clientActions, completion } = dispatchEvent(event, ctx);
-    const actions = await clientActions;
-    after(() => completion);
-    // Filter to script-template only
-    const scripts = actions.items.filter((i) => i.type === "script-template");
-    return Response.json({ ok: true, scripts: scripts.length > 0 ? scripts : undefined });
-  }
-
-  return Response.json({ ok: true });
 }
