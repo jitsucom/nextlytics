@@ -152,7 +152,7 @@ describe.each(versions)("%s", (version) => {
       await page.close();
     });
 
-    it("on-client-event backend receives events with full client context", async () => {
+    it("on-page-load backend receives events with full client context", async () => {
       const page = await testApp.newPage();
 
       await testApp.visitHome(page);

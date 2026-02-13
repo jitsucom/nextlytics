@@ -11,7 +11,7 @@ import type {
   BackendWithConfig,
   ClientAction,
   DispatchResult,
-  IngestPolicy,
+  PageViewDelivery,
   JavascriptTemplate,
   NextlyticsBackend,
   NextlyticsBackendFactory,
@@ -28,15 +28,24 @@ import { generateId } from "./uitils";
 
 type ResolvedBackend = {
   backend: NextlyticsBackend;
-  ingestPolicy: IngestPolicy;
+  pageViewDelivery: PageViewDelivery;
 };
 
-type PolicyFilter = IngestPolicy | "client-actions";
+/**
+ * Filter for resolveBackends():
+ * - PageViewDelivery value: return only backends with that delivery mode
+ * - "client-actions": return on-page-load backends + any backend with returnsClientActions
+ */
+type PolicyFilter = PageViewDelivery | "client-actions";
 
 function isBackendWithConfig(entry: unknown): entry is BackendWithConfig {
   return typeof entry === "object" && entry !== null && "backend" in entry;
 }
 
+/**
+ * Resolve backend config entries into concrete backends with their delivery mode.
+ * Optionally filter by PolicyFilter — see PolicyFilter type for semantics.
+ */
 function resolveBackends(
   config: NextlyticsConfig,
   ctx: RequestContext,
@@ -47,20 +56,20 @@ function resolveBackends(
     .map((entry): ResolvedBackend | null => {
       if (isBackendWithConfig(entry)) {
         const backend = typeof entry.backend === "function" ? entry.backend(ctx) : entry.backend;
-        return backend ? { backend, ingestPolicy: entry.ingestPolicy ?? "immediate" } : null;
+        return backend ? { backend, pageViewDelivery: entry.pageViewDelivery ?? "on-request" } : null;
       }
-      // Plain backend or factory - default to immediate
+      // Plain backend or factory - default to on-request
       const backend =
         typeof entry === "function" ? (entry as NextlyticsBackendFactory)(ctx) : entry;
-      return backend ? { backend, ingestPolicy: "immediate" } : null;
+      return backend ? { backend, pageViewDelivery: "on-request" } : null;
     })
     .filter((b): b is ResolvedBackend => b !== null)
     .filter((b) => {
       if (!policyFilter) return true;
       if (policyFilter === "client-actions") {
-        return b.ingestPolicy === "on-client-event" || b.backend.returnsClientActions;
+        return b.pageViewDelivery === "on-page-load" || b.backend.returnsClientActions;
       }
-      return b.ingestPolicy === policyFilter;
+      return b.pageViewDelivery === policyFilter;
     });
 }
 
@@ -189,8 +198,8 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     patch: Partial<NextlyticsEvent>,
     ctx: RequestContext
   ): Promise<void> => {
-    // Only update "immediate" backends that support updates
-    const resolved = resolveBackends(config, ctx, "immediate").filter(
+    // Only update "on-request" backends that support updates
+    const resolved = resolveBackends(config, ctx, "on-request").filter(
       ({ backend }) => backend.supportsUpdates
     );
     const results = await Promise.all(

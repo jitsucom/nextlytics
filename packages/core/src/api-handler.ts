@@ -8,7 +8,7 @@ import type {
   ClientContext,
   ClientRequest,
   DispatchResult,
-  IngestPolicy,
+  PageViewDelivery,
   NextlyticsEvent,
   RequestContext,
   ServerEventContext,
@@ -21,7 +21,7 @@ import { resolveAnonymousUser } from "./anonymous-user";
 export type DispatchEvent = (
   event: NextlyticsEvent,
   ctx: RequestContext,
-  policyFilter?: IngestPolicy | "client-actions"
+  policyFilter?: PageViewDelivery | "client-actions"
 ) => DispatchResult;
 
 export type UpdateEvent = (
@@ -93,7 +93,7 @@ function filterScripts(actions: { items: { type: string }[] }) {
 }
 
 async function handleClientInit(
-  request: Extract<ClientRequest, { type: "client-init" }>,
+  request: Extract<ClientRequest, { type: "page-view" }>,
   hctx: HandlerContext
 ): Promise<Response> {
   const {
@@ -114,8 +114,8 @@ async function handleClientInit(
     config,
   });
 
-  // Dispatch on client-init to:
-  // - on-client-event backends (for delayed ingestion), and
+  // Dispatch on page-view to:
+  // - on-page-load backends (for delayed delivery), and
   // - any backend that returns client actions (to ensure scripts are sent on soft nav).
   // Soft navigation keeps the same pageRenderId but needs a fresh eventId
   // so client-side scripts depending on eventId can re-run per navigation.
@@ -139,7 +139,7 @@ async function handleClientInit(
   const actions = await clientActions;
   after(() => completion);
 
-  // Update "immediate" backends with client context
+  // Update "on-request" backends with client context
   after(() => updateEvent(pageRenderId, { clientContext, userContext, anonymousUserId }, ctx));
 
   // App Router: on hard navigation the Server component re-renders and receives
@@ -152,7 +152,7 @@ async function handleClientInit(
 }
 
 async function handleClientEvent(
-  request: Extract<ClientRequest, { type: "client-event" }>,
+  request: Extract<ClientRequest, { type: "custom-event" }>,
   hctx: HandlerContext
 ): Promise<Response> {
   const { pageRenderId, ctx, apiCallServerContext, userContext, config, dispatchEvent } = hctx;
@@ -234,9 +234,9 @@ export async function handleEventPost(
 
   const bodyType = body.type;
   switch (bodyType) {
-    case "client-init":
+    case "page-view":
       return handleClientInit(body, hctx);
-    case "client-event":
+    case "custom-event":
       return handleClientEvent(body, hctx);
     default:
       return Response.json({ ok: false, error: `Unknown body type ${bodyType}` }, { status: 400 });

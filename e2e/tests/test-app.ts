@@ -110,7 +110,7 @@ export class TestApp {
     throw new Error(`Timed out waiting for analytics events after ${timeout}ms`);
   }
 
-  /** Get events from the delayed (on-client-event) backend */
+  /** Get events from the delayed (on-page-load) backend */
   async getDelayedAnalyticsEvents(): Promise<AnalyticsEventRow[]> {
     return this.services.getDelayedAnalyticsEvents();
   }

@@ -107,13 +107,13 @@ const backends: BackendConfigEntry[] = [
     url: process.env.POSTGREST_URL || "http://localhost:3001",
     tableName: "analytics",
   }),
-  // Delayed backend - receives events on client-init (has full client context)
+  // Delayed backend - receives events on page load (has full client context)
   {
     backend: postgrestBackend({
       url: process.env.POSTGREST_URL || "http://localhost:3001",
       tableName: "analytics_delayed",
     }),
-    ingestPolicy: "on-client-event",
+    pageViewDelivery: "on-page-load",
   },
   consoleTestBackend(),
 ];

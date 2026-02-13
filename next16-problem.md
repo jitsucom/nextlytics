@@ -61,7 +61,7 @@ const isPageNavigation = isDocumentRequest || acceptsHtml;
 ### Implications
 - Middleware (`packages/core/src/middleware.ts`) emits pageViews only for
   hard/document navigations.
-- Soft navigations must be recorded via `/api/event` (client-init).
+- Soft navigations must be recorded via `/api/event` (page-view).
 - To keep the immediate backend (PostgREST) updated on soft nav,
   `handleClientInit` in `packages/core/src/api-handler.ts` should include
   immediate backends when `softNavigation` is true.

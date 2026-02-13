@@ -19,7 +19,7 @@ export type {
   AnonymousUserResult,
   BackendConfigEntry,
   BackendWithConfig,
-  IngestPolicy,
+  PageViewDelivery,
   JavascriptTemplate,
   ClientAction,
   PagesRouterContext,

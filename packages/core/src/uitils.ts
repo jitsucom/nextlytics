@@ -30,6 +30,37 @@ export type RequestInfo = {
   isNextjsInternal: boolean;
 };
 
+/**
+ * Best-effort Next.js major version detection.
+ *
+ * Prefer passing an explicit version string (e.g. from package.json) when available.
+ * Header-based detection is heuristic and may return undefined.
+ */
+export function getNextjsMajorVersion(
+  headers?: Headers
+): 15 | 16 | undefined {
+  const parseMajor = (value?: string | null): 15 | 16 | undefined => {
+    if (!value) return undefined;
+    const match = value.match(/(\d+)/);
+    if (!match) return undefined;
+    const major = Number(match[1]);
+    if (major === 15 || major === 16) return major;
+    return undefined;
+  };
+
+  if (!headers) return undefined;
+
+  // 1) Non-standard but sometimes present in hosting layers
+  const headerVersion = parseMajor(headers.get("x-nextjs-version"));
+  if (headerVersion) return headerVersion;
+
+  // 2) Heuristics (best-effort, can be wrong)
+  if (headers.has("next-router-segment-prefetch")) return 16;
+  if (headers.has("x-nextjs-data")) return 15;
+
+  return undefined;
+}
+
 export function getRequestInfo(request: NextRequest): RequestInfo {
   const headers = request.headers;
   const pathname = request.nextUrl.pathname;

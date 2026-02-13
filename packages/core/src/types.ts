@@ -123,18 +123,18 @@ export type NextlyticsPlugin = {
 /** Factory to create plugin per-request (for request-scoped plugins) */
 export type NextlyticsPluginFactory = (ctx: RequestContext) => NextlyticsPlugin;
 
-/** When to ingest events for a backend */
-export type IngestPolicy =
-  /** Dispatch immediately in middleware (default) - faster but no client context */
-  | "immediate"
-  /** Dispatch when client-init is received - has full client context (title, screen, etc) */
-  | "on-client-event";
+/** When to deliver page view events for a backend */
+export type PageViewDelivery =
+  /** Dispatch on server request in middleware (default) - faster but no client context */
+  | "on-request"
+  /** Dispatch on page load (client-side) - has full client context (title, screen, etc) */
+  | "on-page-load";
 
 /** Backend with configuration options */
 export type BackendWithConfig = {
   backend: NextlyticsBackend | NextlyticsBackendFactory;
-  /** When to send events. Default: "immediate" */
-  ingestPolicy?: IngestPolicy;
+  /** When to send events. Default: "on-request" */
+  pageViewDelivery?: PageViewDelivery;
 };
 
 /** Backend config entry - either a backend directly or with config */
@@ -264,13 +264,13 @@ export type NextlyticsClientContext = {
 /** Client-to-server request types (discriminated union) */
 export type ClientRequest =
   | {
-      type: "client-init";
+      type: "page-view";
       clientContext: ClientContext;
       /** If true, only update existing event (soft navigation - no dispatch, no scripts) */
       softNavigation?: boolean;
     }
   | {
-      type: "client-event";
+      type: "custom-event";
       name: string;
       props?: Record<string, unknown>;
       collectedAt: string;

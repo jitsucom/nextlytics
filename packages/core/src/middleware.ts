@@ -111,8 +111,8 @@ export function createNextlyticsMiddleware(
       anonId
     );
 
-    // Dispatch to "immediate" backends only - "on-client-event" backends dispatch later
-    const { clientActions, completion } = dispatchEvent(pageViewEvent, ctx, "immediate");
+    // Dispatch to "on-request" backends only - "on-page-load" backends dispatch later
+    const { clientActions, completion } = dispatchEvent(pageViewEvent, ctx, "on-request");
     const actions = await clientActions;
 
     // Extract script-template actions

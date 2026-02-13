@@ -74,7 +74,7 @@ type CompiledScript = InjectScriptProps & { key: string };
  * Deduplicate script insertions by template id + deps.
  *
  * Why this exists:
- * - The same template can arrive twice (SSR headers + client-init response).
+ * - The same template can arrive twice (SSR headers + page-view response).
  *
  * Behavior:
  * - If a template has no deps, keep ALL instances (like useEffect without deps).
@@ -285,16 +285,16 @@ export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: Rea
     [requestId, templates, addScripts]
   );
 
-  // Send client-init on mount and soft navigations
+  // Send page-view on mount and soft navigations
   useNavigation(requestId, ({ softNavigation, signal }) => {
-    debug("Sending client-init", { requestId, softNavigation });
+    debug("Sending page-view", { requestId, softNavigation });
     const clientContext = createClientContext();
     sendEventToServer(
       requestId,
-      { type: "client-init", clientContext, softNavigation: softNavigation || undefined },
+      { type: "page-view", clientContext, softNavigation: softNavigation || undefined },
       { signal, isSoftNavigation: softNavigation }
     ).then(({ items }) => {
-      debug("client-init response", { scriptsCount: items?.length ?? 0 });
+      debug("page-view response", { scriptsCount: items?.length ?? 0 });
       if (items?.length) addScripts(items);
     });
   });
@@ -332,7 +332,7 @@ export function useNextlytics(): NextlyticsClientApi {
       opts?: { props?: Record<string, unknown> }
     ): Promise<{ ok: boolean }> => {
       const result = await sendEventToServer(requestId, {
-        type: "client-event",
+        type: "custom-event",
         name: eventName,
         props: opts?.props,
         collectedAt: new Date().toISOString(),
