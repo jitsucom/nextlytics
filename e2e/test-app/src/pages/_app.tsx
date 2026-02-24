@@ -19,9 +19,10 @@ MyApp.getInitialProps = async (appContext: AppContext) => {
   const { ctx } = appContext;
 
   // Only get nextlytics props on server-side (when req is available)
-  const nextlyticsCtx: NextlyticsContext = ctx.req
-    ? getNextlyticsProps({ req: { headers: ctx.req.headers } })
-    : { requestId: "" };
+  let nextlyticsCtx: NextlyticsContext = { requestId: "" };
+  if (ctx.req) {
+    nextlyticsCtx = getNextlyticsProps({ req: { headers: ctx.req.headers } });
+  }
 
   return {
     pageProps: appContext.Component.getInitialProps

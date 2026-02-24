@@ -107,12 +107,12 @@ export class TestAppLauncher {
 
     this.appProcess.stdout?.on("data", (data) => {
       const msg = data.toString();
-      if (process.env.DEBUG) console.log(`[${this.version}] ${msg}`);
+      console.log(`[${this.version}] ${msg}`);
     });
 
     this.appProcess.stderr?.on("data", (data) => {
       const msg = data.toString();
-      if (process.env.DEBUG) console.error(`[${this.version}] ${msg}`);
+      console.error(`[${this.version}] ${msg}`);
     });
 
     await this.waitForServer();

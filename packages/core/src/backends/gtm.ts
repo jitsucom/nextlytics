@@ -15,6 +15,10 @@ type GTMInitParams = {
   initialData: Record<string, unknown>;
 };
 
+type GTMInitDataParams = {
+  initialData: Record<string, unknown>;
+};
+
 type GTMPageViewParams = {
   pageData: Record<string, unknown>;
 };
@@ -24,6 +28,7 @@ type GTMEventParams = {
 };
 
 const GTM_INIT_TEMPLATE_ID = "gtm-init";
+const GTM_INIT_DATA_TEMPLATE_ID = "gtm-init-data";
 const GTM_PAGEVIEW_TEMPLATE_ID = "gtm-pageview";
 const GTM_EVENT_TEMPLATE_ID = "gtm-event";
 
@@ -47,18 +52,24 @@ export function googleTagManagerBackend(opts: GoogleTagManagerBackendOptions): N
       return {
         [GTM_INIT_TEMPLATE_ID]: {
           items: [
+            // GTM script loader - run once
             {
               body: [
                 "window.dataLayer = window.dataLayer || [];",
-                "dataLayer.push({{json(initialData)}});",
-                "if (!window.google_tag_manager || !window.google_tag_manager['{{containerId}}']) {",
-                "  (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':",
-                "  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],",
-                "  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=",
-                "  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);",
-                "  })(window,document,'script','dataLayer','{{containerId}}');",
-                "}",
+                "(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':",
+                "new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],",
+                "j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=",
+                "'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);",
+                "})(window,document,'script','dataLayer','{{containerId}}');",
               ].join("\n"),
+            },
+          ],
+        },
+        [GTM_INIT_DATA_TEMPLATE_ID]: {
+          items: [
+            // Initial data push - run when params change (e.g., user logs in)
+            {
+              body: "dataLayer.push({{json(initialData)}});",
             },
           ],
         },
@@ -146,6 +157,11 @@ export function googleTagManagerBackend(opts: GoogleTagManagerBackendOptions): N
           items: [
             {
               type: "script-template",
+              templateId: GTM_INIT_DATA_TEMPLATE_ID,
+              params: { initialData } satisfies GTMInitDataParams,
+            },
+            {
+              type: "script-template",
               templateId: GTM_PAGEVIEW_TEMPLATE_ID,
               params: { pageData } satisfies GTMPageViewParams,
             },
@@ -160,6 +176,11 @@ export function googleTagManagerBackend(opts: GoogleTagManagerBackendOptions): N
             type: "script-template",
             templateId: GTM_INIT_TEMPLATE_ID,
             params: { containerId, initialData } satisfies GTMInitParams,
+          },
+          {
+            type: "script-template",
+            templateId: GTM_INIT_DATA_TEMPLATE_ID,
+            params: { initialData } satisfies GTMInitDataParams,
           },
           {
             type: "script-template",

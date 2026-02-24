@@ -130,7 +130,7 @@ export class ThirdpartyServices {
     return result.rows;
   }
 
-  /** Get events from the delayed (on-client-event) backend */
+  /** Get events from the delayed (on-page-load) backend */
   async getDelayedAnalyticsEvents(): Promise<AnalyticsEventRow[]> {
     const result = await this.getPool().query<AnalyticsEventRow>(
       "SELECT * FROM analytics_delayed ORDER BY timestamp ASC"

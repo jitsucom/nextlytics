@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { NextlyticsServer } from "@nextlytics/core/server";
+import { NextlyticsServer } from "@/nextlytics";
 
 export const metadata = {
   title: "E2E Test App",

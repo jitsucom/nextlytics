@@ -27,7 +27,7 @@
  * })
  * ```
  */
-import type { NextlyticsBackend, NextlyticsEvent } from "../types";
+import type { ClientAction, NextlyticsBackend, NextlyticsEvent } from "../types";
 
 export type SegmentBackendConfig = {
   /** Segment write key */
@@ -145,7 +145,7 @@ export function segmentBackend(config: SegmentBackendConfig): NextlyticsBackend 
     name: "segment",
     supportsUpdates: false,
 
-    async onEvent(event: NextlyticsEvent): Promise<void> {
+    async onEvent(event: NextlyticsEvent): Promise<ClientAction | undefined> {
       const context = buildContext(event);
       const properties = buildProperties(event);
 
@@ -163,6 +163,7 @@ export function segmentBackend(config: SegmentBackendConfig): NextlyticsBackend 
       } else {
         await send([{ type: "track", event: event.type, ...basePayload }]);
       }
+      return undefined;
     },
 
     updateEvent() {

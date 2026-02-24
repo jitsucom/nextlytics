@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import Link from "next/link";
 
 export default async function Home() {
   const session = await auth();
@@ -23,9 +24,9 @@ export default async function Home() {
         </div>
       )}
       <nav>
-        <a href="/test-page" data-testid="test-page-link">
+        <Link href="/test-page" data-testid="test-page-link">
           Test Page
-        </a>
+        </Link>
       </nav>
     </main>
   );

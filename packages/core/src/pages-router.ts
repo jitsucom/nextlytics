@@ -1,39 +1,15 @@
 import type { NextlyticsContext } from "./client";
 import { restoreServerComponentContext } from "./server-component-context";
 
-type ContextWithHeaders = { req: { headers: Record<string, string | string[] | undefined> } };
+export type PagesRouterContext = {
+  req: { headers: Record<string, string | string[] | undefined>; cookies?: Record<string, string> };
+};
 
 /**
- * Extract Nextlytics context from Pages Router context (getServerSideProps or getInitialProps).
- * Use this in _app.tsx with getInitialProps to pass context to NextlyticsClient.
- *
- * @example
- * ```tsx
- * // pages/_app.tsx
- * import type { AppContext, AppProps } from 'next/app'
- * import { NextlyticsClient, getNextlyticsProps, type NextlyticsContext } from '@nextlytics/core'
- *
- * type MyAppProps = AppProps & { nextlyticsCtx: NextlyticsContext }
- *
- * function MyApp({ Component, pageProps, nextlyticsCtx }: MyAppProps) {
- *   return (
- *     <NextlyticsClient ctx={nextlyticsCtx}>
- *       <Component {...pageProps} />
- *     </NextlyticsClient>
- *   )
- * }
- *
- * MyApp.getInitialProps = async (appContext: AppContext) => {
- *   return {
- *     pageProps: appContext.Component.getInitialProps
- *       ? await appContext.Component.getInitialProps(appContext.ctx)
- *       : {},
- *     nextlyticsCtx: getNextlyticsProps(appContext.ctx),
- *   }
- * }
- * ```
+ * Get Nextlytics props for Pages Router _app.tsx.
+ * Reads context from headers set by middleware.
  */
-export function getNextlyticsProps(ctx: ContextWithHeaders): NextlyticsContext {
+export function getNextlyticsProps(ctx: PagesRouterContext): NextlyticsContext {
   const headersList = new Headers();
   for (const [key, value] of Object.entries(ctx.req.headers)) {
     if (value) {
@@ -49,6 +25,5 @@ export function getNextlyticsProps(ctx: ContextWithHeaders): NextlyticsContext {
   return {
     requestId: context.pageRenderId,
     scripts: context.scripts,
-    templates: context.templates,
   };
 }

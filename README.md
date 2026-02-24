@@ -131,6 +131,7 @@ export default MyApp;
 
 **3. Export middleware** (same as App Router)
 
+
 ## Supported Backends
 
 | Backend                                                                 | Type              |
