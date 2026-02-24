@@ -114,14 +114,10 @@ async function handleClientInit(
     config,
   });
 
-  // Dispatch on page-view to:
-  // - on-page-load backends (for delayed delivery), and
-  // - any backend that returns client actions (to ensure scripts are sent on soft nav).
   // Soft navigation keeps the same pageRenderId but needs a fresh eventId
   // so client-side scripts depending on eventId can re-run per navigation.
   const isSoftNavigation = hctx.isSoftNavigation;
   const eventId = isSoftNavigation ? generateId() : pageRenderId;
-
   const event: NextlyticsEvent = {
     origin: "client",
     eventId,
@@ -135,20 +131,25 @@ async function handleClientInit(
     properties: {},
   };
 
-  const { clientActions, completion } = dispatchEvent(event, ctx, "client-actions");
-  const actions = await clientActions;
-  after(() => completion);
+  if (isSoftNavigation) {
+    // Soft nav: middleware skipped RSC requests, dispatch to all backends here
+    const { clientActions, completion } = dispatchEvent(event, ctx);
+    const actions = await clientActions;
+    after(() => completion);
 
-  // Update "on-request" backends with client context
+    return Response.json({
+      ok: true,
+      items: filterScripts(actions),
+    });
+  }
+
+  // Hard nav: dispatch to on-page-load + returnsClientActions backends,
+  // update on-request backends with client context
+  const { completion } = dispatchEvent(event, ctx, "client-actions");
+  after(() => completion);
   after(() => updateEvent(pageRenderId, { clientContext, userContext, anonymousUserId }, ctx));
 
-  // App Router: on hard navigation the Server component re-renders and receives
-  // scripts via RSC headers. On soft navigation the Server/Client remains mounted,
-  // so scripts must be returned from /api/event.
-  return Response.json({
-    ok: true,
-    items: isSoftNavigation ? filterScripts(actions) : undefined,
-  });
+  return Response.json({ ok: true });
 }
 
 async function handleClientEvent(
@@ -213,8 +214,7 @@ export async function handleEventPost(
   const userContext = await getUserContext(config, ctx);
 
   const cookiePageRenderId = request.cookies.get(LAST_PAGE_RENDER_ID_COOKIE)?.value;
-  const pageRenderId =
-    isSoftNavigation ? cookiePageRenderId ?? generateId() : pageRenderIdHeader;
+  const pageRenderId = isSoftNavigation ? (cookiePageRenderId ?? generateId()) : pageRenderIdHeader;
   if (isSoftNavigation && !cookiePageRenderId && config.debug) {
     console.warn(
       "[Nextlytics] Missing last-page-render-id cookie on soft navigation; using a new id."

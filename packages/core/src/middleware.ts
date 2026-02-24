@@ -1,6 +1,9 @@
 import type { NextMiddleware, NextRequest } from "next/server";
 import { NextResponse, after } from "next/server";
-import { LAST_PAGE_RENDER_ID_COOKIE, serializeServerComponentContext } from "./server-component-context";
+import {
+  LAST_PAGE_RENDER_ID_COOKIE,
+  serializeServerComponentContext,
+} from "./server-component-context";
 import type {
   NextlyticsEvent,
   RequestContext,
@@ -9,7 +12,7 @@ import type {
   UserContext,
 } from "./types";
 import type { NextlyticsConfigWithDefaults } from "./config-helpers";
-import { generateId, getRequestInfo, createServerContext } from "./uitils";
+import { generateId, getRequestInfo, createServerContext, getNextVersion } from "./uitils";
 import { resolveAnonymousUser } from "./anonymous-user";
 import {
   handleEventPost,
@@ -35,8 +38,7 @@ export function createNextlyticsMiddleware(
   return async (request) => {
     const pathname = request.nextUrl.pathname;
     const reqInfo = getRequestInfo(request);
-    const middlewareDebug =
-      config.debug || process.env.NEXTLYTICS_MIDDLEWARE_DEBUG === "true";
+    const middlewareDebug = config.debug || process.env.NEXTLYTICS_MIDDLEWARE_DEBUG === "true";
 
     if (middlewareDebug) {
       const headers = request.headers;
@@ -46,8 +48,17 @@ export function createNextlyticsMiddleware(
       });
 
       console.log("[Nextlytics][middleware]", {
+        url: request.url,
         pathname,
+        search: request.nextUrl.search,
         method: request.method,
+        nextVersion: getNextVersion(),
+        destination: request.destination,
+        referrer: request.referrer,
+        mode: request.mode,
+        cache: request.cache,
+        redirect: request.redirect,
+        integrity: request.integrity,
         isPrefetch: reqInfo.isPrefetch,
         isRsc: reqInfo.isRsc,
         isPageNavigation: reqInfo.isPageNavigation,
@@ -67,6 +78,12 @@ export function createNextlyticsMiddleware(
 
     // Skip internal paths, prefetch, and static files
     if (reqInfo.isNextjsInternal || reqInfo.isPrefetch || reqInfo.isStaticFile) {
+      return NextResponse.next();
+    }
+
+    // Skip non-page-navigation, non-API requests (e.g. RSC fetches).
+    // Soft navigations are tracked via the client /api/event request.
+    if (!reqInfo.isPageNavigation && !config.isApiPath(pathname)) {
       return NextResponse.next();
     }
 

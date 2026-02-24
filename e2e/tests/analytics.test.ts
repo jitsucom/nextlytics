@@ -219,7 +219,7 @@ describe.each(versions)("%s", (version) => {
       expect(initialCounters.event).toBe(1);
 
       // Here's why double wait, first is to make sure /api/event was started (it's async
-      // second, wait until /api/event is done and give some time to inject scripts 
+      // second, wait until /api/event is done and give some time to inject scripts
       await page.click('[data-testid="test-page-link"]');
       await page.waitForTimeout(100);
       await page.waitForLoadState("networkidle");

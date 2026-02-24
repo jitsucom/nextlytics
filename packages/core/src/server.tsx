@@ -1,10 +1,7 @@
 import type { ReactNode } from "react";
 import { headers, cookies } from "next/headers";
 import { removeSensitiveHeaders } from "./headers";
-import {
-  headerNames,
-  restoreServerComponentContext,
-} from "./server-component-context";
+import { headerNames, restoreServerComponentContext } from "./server-component-context";
 import { resolveAnonymousUser } from "./anonymous-user";
 import { NextlyticsClient } from "./client";
 import type {
@@ -56,7 +53,9 @@ function resolveBackends(
     .map((entry): ResolvedBackend | null => {
       if (isBackendWithConfig(entry)) {
         const backend = typeof entry.backend === "function" ? entry.backend(ctx) : entry.backend;
-        return backend ? { backend, pageViewDelivery: entry.pageViewDelivery ?? "on-request" } : null;
+        return backend
+          ? { backend, pageViewDelivery: entry.pageViewDelivery ?? "on-request" }
+          : null;
       }
       // Plain backend or factory - default to on-request
       const backend =
@@ -121,7 +120,6 @@ function collectTemplates(
   }
   return templates;
 }
-
 
 export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
   const config = withDefaults(userConfig);

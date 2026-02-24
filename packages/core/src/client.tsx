@@ -20,7 +20,7 @@ import type {
 } from "./types";
 import { headerNames } from "./server-component-context";
 import { apply, compile, type TemplateFunctions } from "./template";
-import {stableHash} from "./stable-hash";
+import { stableHash, type JsonValue } from "./stable-hash";
 
 /** Context object for Pages Router integration */
 export type NextlyticsContext = {
@@ -32,7 +32,7 @@ export type NextlyticsContext = {
 const templateFunctions: TemplateFunctions = {
   q: (v) => JSON.stringify(v ?? null),
   json: (v) => JSON.stringify(v ?? null),
-  stableHash: (v) => stableHash(v as any)
+  stableHash: (v) => stableHash(v as JsonValue),
 };
 
 type NextlyticsContextValue = {
@@ -233,7 +233,7 @@ async function sendEventToServer(
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       [headerNames.pageRenderId]: requestId,
-    } ;
+    };
     if (isSoftNavigation) {
       headers[headerNames.isSoftNavigation] = "1";
     }
