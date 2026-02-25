@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.1](https://github.com/jitsucom/nextlytics/compare/v0.3.0...v0.3.1) (2026-02-25)
+
+
+### Bug Fixes
+
+* abort stale soft navigation requests and simplify event handling ([0615b93](https://github.com/jitsucom/nextlytics/commit/0615b93743bcd42f8bc16f7623c0270dd279f543))
+* handle soft navigation in App Router ([11efd46](https://github.com/jitsucom/nextlytics/commit/11efd46cc92d5579c7020c4bf424fa58228dea7c))
+* prevent duplicate scripts on soft navigation ([6394b1b](https://github.com/jitsucom/nextlytics/commit/6394b1ba367a89c31c72de465d60fa02fe379006))
+* prevent duplicate scripts on soft navigation ([#29](https://github.com/jitsucom/nextlytics/issues/29)) ([455402a](https://github.com/jitsucom/nextlytics/commit/455402a40069ea2049ffc5ada705aa2892dd324b))
+* remove pathname from client-init deps to enable soft navigation detection ([8193f8f](https://github.com/jitsucom/nextlytics/commit/8193f8f596e55a29238dd98f8d1070ef1a450e6b))
+* track soft navigations via client /api/event instead of middleware ([d83bd2c](https://github.com/jitsucom/nextlytics/commit/d83bd2c403b51db783c7186cabc69c0013147b5c))
+
 ## [0.3.0](https://github.com/jitsucom/nextlytics/compare/v0.2.2...v0.3.0) (2026-02-10)
 
 
