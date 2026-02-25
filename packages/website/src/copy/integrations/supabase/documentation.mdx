@@ -87,6 +87,36 @@ CREATE POLICY "Service role can update" ON analytics
   FOR UPDATE TO service_role USING (true);
 ```
 
+If you're using Prisma, add this model to your `schema.prisma` instead:
+
+```prisma
+model Analytics {
+  event_id          String   @id
+  type              String
+  collected_at      DateTime @db.Timestamptz()
+  anonymous_user_id String?
+  user_id           String?
+  path              String?
+  host              String?
+  method            String?
+  ip                String?
+  referer           String?
+  user_agent        String?
+  locale            String?
+  properties        Json?    @db.JsonB
+  server_context    Json?    @db.JsonB
+  client_context    Json?    @db.JsonB
+  user_context      Json?    @db.JsonB
+
+  @@index([collected_at(sort: Desc)])
+  @@index([type])
+  @@index([user_id])
+  @@map("analytics")
+}
+```
+
+Then run `npx prisma db push` or add a migration with `npx prisma migrate dev`.
+
 ## Event Updates
 
 The PostgREST backend supports event updates. When client context becomes available, Nextlytics
