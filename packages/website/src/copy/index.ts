@@ -15,7 +15,16 @@ export const packageManagers = {
   yarn: "yarn add @nextlytics/core",
 } as const;
 
-const defaultAuthImport = 'import { auth } from "./lib/auth"; // next-auth';
+const defaultAuthImport = [
+  "// Nextlytics runs in Edge middleware, so it can't import your main auth.ts",
+  "// if it pulls in Prisma, nodemailer, or other Node.js-only deps.",
+  "// Create a lightweight auth instance from your edge-safe base config.",
+  "// See: https://authjs.dev/guides/edge-compatibility",
+  'import NextAuth from "next-auth";',
+  'import authConfig from "./auth.config";',
+  "",
+  "const { auth } = NextAuth(authConfig);",
+].join("\n");
 const defaultAuthCallback = [
   "    async getUser() {",
   "      const session = await auth();",
@@ -44,7 +53,6 @@ export function configSnippet(opts: ConfigSnippetOptions): string {
     "// src/nextlytics.ts",
     'import { Nextlytics } from "@nextlytics/core/server";',
     opts.backendImport,
-    "// Optional: import your auth library to track authenticated users",
     authImport,
     "",
     "export const { middleware, analytics } = Nextlytics({",

@@ -45,8 +45,14 @@ npm install @nextlytics/core
 ```typescript
 import { Nextlytics } from "@nextlytics/core/server";
 import { segmentBackend } from "@nextlytics/core/backends/segment";
-// Optional: import your auth library to track authenticated users
-import { auth } from "./lib/auth"; // next-auth
+// Nextlytics runs in Next.js middleware (Edge runtime), so it can't import
+// your main auth.ts if it pulls in Prisma, nodemailer, or other Node.js deps.
+// Instead, create a lightweight auth instance from your edge-safe base config.
+// See: https://authjs.dev/guides/edge-compatibility
+import NextAuth from "next-auth";
+import authConfig from "./auth.config";
+
+const { auth } = NextAuth(authConfig);
 
 export const { middleware, analytics } = Nextlytics({
   backends: [
