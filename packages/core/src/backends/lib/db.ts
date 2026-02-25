@@ -1,21 +1,21 @@
 import type { ClientContext, NextlyticsEvent, ServerEventContext } from "../../types";
 
 export const tableColumns = [
-  { name: "event_id", pgType: "TEXT PRIMARY KEY", chType: "String" },
-  { name: "parent_event_id", pgType: "TEXT", chType: "Nullable(String)" },
-  { name: "timestamp", pgType: "TIMESTAMPTZ", chType: "DateTime64(3)" },
-  { name: "type", pgType: "TEXT", chType: "LowCardinality(String)" },
-  { name: "anonymous_user_id", pgType: "TEXT", chType: "Nullable(String)" },
+  { name: "timestamp", pgType: "TIMESTAMPTZ NOT NULL", chType: "DateTime64(3)" },
+  { name: "type", pgType: "TEXT NOT NULL", chType: "LowCardinality(String)" },
+  { name: "host", pgType: "TEXT", chType: "LowCardinality(String)" },
+  { name: "path", pgType: "TEXT", chType: "String" },
+  { name: "method", pgType: "TEXT", chType: "LowCardinality(String)" },
   { name: "user_id", pgType: "TEXT", chType: "Nullable(String)" },
+  { name: "anonymous_user_id", pgType: "TEXT", chType: "Nullable(String)" },
   { name: "user_email", pgType: "TEXT", chType: "Nullable(String)" },
   { name: "user_name", pgType: "TEXT", chType: "Nullable(String)" },
-  { name: "host", pgType: "TEXT", chType: "LowCardinality(String)" },
-  { name: "method", pgType: "TEXT", chType: "LowCardinality(String)" },
-  { name: "path", pgType: "TEXT", chType: "String" },
   { name: "ip", pgType: "INET", chType: "Nullable(IPv6)" },
   { name: "referer", pgType: "TEXT", chType: "Nullable(String)" },
   { name: "user_agent", pgType: "TEXT", chType: "Nullable(String)" },
   { name: "locale", pgType: "TEXT", chType: "LowCardinality(Nullable(String))" },
+  { name: "event_id", pgType: "TEXT PRIMARY KEY", chType: "String" },
+  { name: "parent_event_id", pgType: "TEXT", chType: "Nullable(String)" },
   { name: "server_context", pgType: "JSONB", chType: "JSON" },
   { name: "client_context", pgType: "JSONB", chType: "JSON" },
   { name: "user_traits", pgType: "JSONB", chType: "JSON" },
@@ -70,21 +70,21 @@ function extractCommonFields(event: NextlyticsEvent) {
     : null;
 
   return {
-    event_id: event.eventId,
-    parent_event_id: event.parentEventId ?? null,
     timestamp: event.collectedAt,
     type: event.type,
-    anonymous_user_id: event.anonymousUserId ?? null,
+    host,
+    path,
+    method,
     user_id: event.userContext?.userId ?? null,
+    anonymous_user_id: event.anonymousUserId ?? null,
     user_email: event.userContext?.traits?.email ?? null,
     user_name: event.userContext?.traits?.name ?? null,
-    host,
-    method,
-    path,
     ip: ip || null,
     referer: clientCtx.referer ?? null,
     user_agent: clientCtx.user_agent ?? null,
     locale: clientCtx.locale ?? null,
+    event_id: event.eventId,
+    parent_event_id: event.parentEventId ?? null,
     serverContextRest,
     clientContextRest: clientCtx.rest,
     userTraitsRest,
@@ -119,9 +119,9 @@ export function eventToJsonRow(event: NextlyticsEvent): Record<ColumnName, unkno
 
 // Postgres
 export function generatePgCreateTableSQL(tableName: string): string {
-  const pk = tableColumns[0];
+  const pk = tableColumns.find((c) => c.pgType.includes("PRIMARY KEY"))!;
   const alters = tableColumns
-    .slice(1)
+    .filter((c) => c !== pk)
     .map((col) => `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ${col.name} ${col.pgType};`)
     .join("\n");
 
@@ -142,7 +142,7 @@ export function generateChCreateTableSQL(database: string, tableName: string): s
     .join(", ");
   const create =
     `CREATE TABLE IF NOT EXISTS ${fullTable} (${createCols}) ` +
-    `ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(timestamp) ORDER BY event_id;`;
+    `ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(timestamp) ORDER BY (timestamp, event_id);`;
 
   const alters = tableColumns
     .filter((c) => c.name !== "event_id" && c.name !== "timestamp")
@@ -158,21 +158,21 @@ export function isChTableNotFoundError(text: string): boolean {
 
 /** Row type returned from analytics table queries */
 export interface AnalyticsEventRow {
-  event_id: string;
-  parent_event_id: string | null;
   timestamp: string;
   type: string;
-  anonymous_user_id: string | null;
+  host: string;
+  path: string;
+  method: string;
   user_id: string | null;
+  anonymous_user_id: string | null;
   user_email: string | null;
   user_name: string | null;
-  host: string;
-  method: string;
-  path: string;
   ip: string | null;
   referer: string | null;
   user_agent: string | null;
   locale: string | null;
+  event_id: string;
+  parent_event_id: string | null;
   server_context: Record<string, unknown>;
   client_context: Record<string, unknown>;
   user_traits: Record<string, unknown>;

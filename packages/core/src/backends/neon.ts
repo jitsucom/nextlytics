@@ -70,10 +70,17 @@ export function neonBackend(config: NeonBackendConfig): NextlyticsBackend {
 
       if (sets.length > 0) {
         params.push(eventId);
-        await sql.query(
-          `UPDATE ${table} SET ${sets.join(", ")} WHERE event_id = $${paramIndex}`,
-          params
-        );
+        try {
+          await sql.query(
+            `UPDATE ${table} SET ${sets.join(", ")} WHERE event_id = $${paramIndex}`,
+            params
+          );
+        } catch (err) {
+          if (isPgTableNotFoundError(err)) {
+            printCreateTableStatement();
+          }
+          throw err;
+        }
       }
     },
   };

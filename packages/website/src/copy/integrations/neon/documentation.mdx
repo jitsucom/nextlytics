@@ -25,33 +25,69 @@ database. It's optimized for serverless environments with connection pooling.
 
 ## Table Schema
 
-On first use, if the table doesn't exist, Nextlytics will print the required CREATE TABLE statement.
-Run it in your Neon SQL editor:
+On first use, if the table doesn't exist, Nextlytics will print the required
+CREATE TABLE statement. Run it in your Neon SQL editor:
 
 ```sql
 CREATE TABLE IF NOT EXISTS analytics (
-  event_id TEXT PRIMARY KEY,
+  timestamp TIMESTAMPTZ NOT NULL,
   type TEXT NOT NULL,
-  collected_at TIMESTAMPTZ NOT NULL,
-  anonymous_user_id TEXT,
-  user_id TEXT,
-  path TEXT,
   host TEXT,
+  path TEXT,
   method TEXT,
-  ip TEXT,
+  user_id TEXT,
+  anonymous_user_id TEXT,
+  user_email TEXT,
+  user_name TEXT,
+  ip INET,
   referer TEXT,
   user_agent TEXT,
   locale TEXT,
-  properties JSONB,
+  event_id TEXT PRIMARY KEY,
+  parent_event_id TEXT,
   server_context JSONB,
   client_context JSONB,
-  user_context JSONB
+  user_traits JSONB,
+  properties JSONB
 );
 
-CREATE INDEX idx_analytics_collected_at ON analytics(collected_at DESC);
+CREATE INDEX idx_analytics_timestamp ON analytics(timestamp DESC);
 CREATE INDEX idx_analytics_type ON analytics(type);
 CREATE INDEX idx_analytics_user_id ON analytics(user_id);
 ```
+
+If you're using Prisma, add this model to your `schema.prisma` instead:
+
+```prisma
+model Analytics {
+  timestamp        DateTime @db.Timestamptz()
+  type             String
+  host             String
+  path             String
+  method           String
+  user_id          String?
+  anonymous_user_id String?
+  user_email       String?
+  user_name        String?
+  ip               String?  @db.Inet
+  referer          String?
+  user_agent       String?
+  locale           String?
+  event_id         String   @id
+  parent_event_id  String?
+  server_context   Json?    @db.JsonB
+  client_context   Json?    @db.JsonB
+  user_traits      Json?    @db.JsonB
+  properties       Json?    @db.JsonB
+
+  @@index([timestamp(sort: Desc)])
+  @@index([type])
+  @@index([user_id])
+  @@map("analytics")
+}
+```
+
+Then run `npx prisma db push` or add a migration with `npx prisma migrate dev`.
 
 ## Event Updates
 
@@ -85,10 +121,10 @@ FROM analytics
 WHERE type = 'purchase';
 
 -- User journey
-SELECT type, path, collected_at
+SELECT type, path, timestamp
 FROM analytics
 WHERE user_id = 'user_123'
-ORDER BY collected_at;
+ORDER BY timestamp;
 ```
 
 ## Branching
