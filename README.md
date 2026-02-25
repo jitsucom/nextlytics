@@ -48,7 +48,7 @@ import { segmentBackend } from "@nextlytics/core/backends/segment";
 // Optional: import your auth library to track authenticated users
 import { auth } from "./lib/auth"; // next-auth
 
-export const { middleware, handlers, analytics } = Nextlytics({
+export const { middleware, analytics } = Nextlytics({
   backends: [
     segmentBackend({
       writeKey: process.env.SEGMENT_WRITE_KEY!,

@@ -26,7 +26,7 @@ export type VercelGeoPluginOptions = {
  * ```ts
  * import { vercelGeoPlugin } from "@nextlytics/core/plugins/vercel-geo";
  *
- * export const { middleware, handlers } = Nextlytics({
+ * export const { middleware } = Nextlytics({
  *   plugins: [vercelGeoPlugin()],
  *   // ...
  * });

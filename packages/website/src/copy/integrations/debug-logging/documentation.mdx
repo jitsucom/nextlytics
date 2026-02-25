@@ -4,7 +4,7 @@
 import { Nextlytics } from "@nextlytics/core/server";
 import { loggingBackend } from "@nextlytics/core/backends/logging";
 
-export const { middleware, handlers, analytics } = Nextlytics({
+export const { middleware, analytics } = Nextlytics({
   backends: [loggingBackend()],
 });
 ```
@@ -62,7 +62,7 @@ import { Nextlytics } from "@nextlytics/core/server";
 import { loggingBackend } from "@nextlytics/core/backends/logging";
 import { posthogBackend } from "@nextlytics/core/backends/posthog";
 
-export const { middleware, handlers, analytics } = Nextlytics({
+export const { middleware, analytics } = Nextlytics({
   backends: [
     // Always log in development
     ...(process.env.NODE_ENV === "development" ? [loggingBackend()] : []),
@@ -89,7 +89,7 @@ Use in tests to verify events are being tracked correctly:
 
 ```typescript
 // In your test setup
-const { middleware, handlers, analytics } = Nextlytics({
+const { middleware, analytics } = Nextlytics({
   backends: [loggingBackend()],
 });
 

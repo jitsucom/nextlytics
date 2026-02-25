@@ -36,7 +36,7 @@ import { Nextlytics } from "@nextlytics/core/server";
 import { vercelGeoPlugin } from "@nextlytics/core/plugins/vercel-geo";
 import { postgrestBackend } from "@nextlytics/core/backends/postgrest";
 
-export const { middleware, handlers, analytics } = Nextlytics({
+export const { middleware, analytics } = Nextlytics({
   plugins: [vercelGeoPlugin()],
   backends: [
     postgrestBackend({
@@ -89,12 +89,14 @@ See where your users are coming from. Filter by country, region, or city in your
 
 ### Personalization
 
-Use geo data to personalize content:
+Nextlytics stores geo data on analytics events. For real-time personalization during rendering,
+read the Vercel geo headers directly:
 
 ```typescript
 // In a server component
-const event = await analytics.getLastEvent();
-const country = event?.properties?.geo?.country;
+import { headers } from "next/headers";
+
+const country = (await headers()).get("x-vercel-ip-country");
 
 if (country === "DE") {
   // Show German pricing
@@ -120,14 +122,22 @@ To test geo functionality locally, you can mock the headers:
 
 ```typescript
 // middleware.ts (development only)
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-export function middleware(request) {
+export function middleware(request: NextRequest) {
   if (process.env.NODE_ENV === "development") {
-    request.headers.set("x-vercel-ip-country", "US");
-    request.headers.set("x-vercel-ip-city", "San Francisco");
-    // ... etc
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-vercel-ip-country", "US");
+    requestHeaders.set("x-vercel-ip-city", "San Francisco");
+
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
   }
+
   return NextResponse.next();
 }
 ```

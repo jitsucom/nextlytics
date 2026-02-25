@@ -6,7 +6,7 @@ import { postgrestBackend } from "@nextlytics/core/backends/postgrest";
 // Optional: import Supabase client to track authenticated users
 import { createClient } from "@/lib/supabase/server";
 
-export const { middleware, handlers, analytics } = Nextlytics({
+export const { middleware, analytics } = Nextlytics({
   backends: [
     postgrestBackend({
       // Required. Your Supabase project URL + /rest/v1
@@ -54,25 +54,28 @@ Create the analytics table in Supabase SQL editor:
 ```sql
 CREATE TABLE IF NOT EXISTS analytics (
   event_id TEXT PRIMARY KEY,
+  timestamp TIMESTAMPTZ NOT NULL,
   type TEXT NOT NULL,
-  collected_at TIMESTAMPTZ NOT NULL,
-  anonymous_user_id TEXT,
-  user_id TEXT,
-  path TEXT,
   host TEXT,
+  path TEXT,
   method TEXT,
-  ip TEXT,
+  user_id TEXT,
+  anonymous_user_id TEXT,
+  user_email TEXT,
+  user_name TEXT,
+  ip INET,
   referer TEXT,
   user_agent TEXT,
   locale TEXT,
-  properties JSONB,
+  parent_event_id TEXT,
   server_context JSONB,
   client_context JSONB,
-  user_context JSONB
+  user_traits JSONB,
+  properties JSONB
 );
 
 -- Indexes for common queries
-CREATE INDEX idx_analytics_collected_at ON analytics(collected_at DESC);
+CREATE INDEX idx_analytics_timestamp ON analytics(timestamp DESC);
 CREATE INDEX idx_analytics_type ON analytics(type);
 CREATE INDEX idx_analytics_user_id ON analytics(user_id);
 
@@ -92,23 +95,26 @@ If you're using Prisma, add this model to your `schema.prisma` instead:
 ```prisma
 model Analytics {
   event_id          String   @id
+  timestamp         DateTime @db.Timestamptz()
   type              String
-  collected_at      DateTime @db.Timestamptz()
-  anonymous_user_id String?
-  user_id           String?
-  path              String?
   host              String?
+  path              String?
   method            String?
-  ip                String?
+  user_id           String?
+  anonymous_user_id String?
+  user_email        String?
+  user_name         String?
+  ip                String?  @db.Inet
   referer           String?
   user_agent        String?
   locale            String?
-  properties        Json?    @db.JsonB
+  parent_event_id   String?
   server_context    Json?    @db.JsonB
   client_context    Json?    @db.JsonB
-  user_context      Json?    @db.JsonB
+  user_traits       Json?    @db.JsonB
+  properties        Json?    @db.JsonB
 
-  @@index([collected_at(sort: Desc)])
+  @@index([timestamp(sort: Desc)])
   @@index([type])
   @@index([user_id])
   @@map("analytics")
@@ -146,14 +152,14 @@ const { data } = await supabase
   .from("analytics")
   .select("path, count")
   .eq("type", "pageView")
-  .gte("collected_at", new Date().toISOString().split("T")[0]);
+  .gte("timestamp", new Date().toISOString().split("T")[0]);
 
 // User events
 const { data: userEvents } = await supabase
   .from("analytics")
   .select("*")
   .eq("user_id", "user_123")
-  .order("collected_at", { ascending: false });
+  .order("timestamp", { ascending: false });
 ```
 
 ## Real-time Subscriptions

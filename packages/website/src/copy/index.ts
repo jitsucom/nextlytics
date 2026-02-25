@@ -47,7 +47,7 @@ export function configSnippet(opts: ConfigSnippetOptions): string {
     "// Optional: import your auth library to track authenticated users",
     authImport,
     "",
-    "export const { middleware, handlers, analytics } = Nextlytics({",
+    "export const { middleware, analytics } = Nextlytics({",
     "  backends: [",
     opts.backendConfig,
     "  ],",

@@ -4,7 +4,7 @@
 import { Nextlytics } from "@nextlytics/core/server";
 import { clickhouseBackend } from "@nextlytics/core/backends/clickhouse";
 
-export const { middleware, handlers, analytics } = Nextlytics({
+export const { middleware, analytics } = Nextlytics({
   backends: [
     clickhouseBackend({
       // Required. ClickHouse HTTP API URL.
@@ -70,11 +70,11 @@ On first use, if the table doesn't exist, Nextlytics prints the required SQL. Th
 
 - **ReplacingMergeTree** - enables deduplication for updates
 - **PARTITION BY month** - optimal partition size for analytics
-- **ORDER BY event_id** - enables efficient updates via insert
+- **ORDER BY (timestamp, event_id)** - enables efficient time-range queries and updates
 
 ```sql
 CREATE TABLE IF NOT EXISTS default.analytics (event_id String, timestamp DateTime64(3))
-ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(timestamp) ORDER BY event_id;
+ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(timestamp) ORDER BY (timestamp, event_id);
 
 ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS parent_event_id Nullable(String);
 ALTER TABLE default.analytics ADD COLUMN IF NOT EXISTS type LowCardinality(String);

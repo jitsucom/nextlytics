@@ -4,7 +4,7 @@
 import { Nextlytics } from "@nextlytics/core/server";
 import { neonBackend } from "@nextlytics/core/backends/neon";
 
-export const { middleware, handlers, analytics } = Nextlytics({
+export const { middleware, analytics } = Nextlytics({
   backends: [
     neonBackend({
       // Required. Your Neon database URL.

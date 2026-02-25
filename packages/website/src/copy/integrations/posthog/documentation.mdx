@@ -4,7 +4,7 @@
 import { Nextlytics } from "@nextlytics/core/server";
 import { posthogBackend } from "@nextlytics/core/backends/posthog";
 
-export const { middleware, handlers, analytics } = Nextlytics({
+export const { middleware, analytics } = Nextlytics({
   backends: [
     posthogBackend({
       // Required. Your PostHog project API key.
@@ -90,7 +90,7 @@ When a user is identified via `callbacks.getUser`, their `userId` becomes the `d
 traits are sent via PostHog's `$set` mechanism:
 
 ```typescript
-export const { middleware, handlers, analytics } = Nextlytics({
+export const { middleware, analytics } = Nextlytics({
   callbacks: {
     getUser: async (ctx) => {
       const session = await getSession(ctx);

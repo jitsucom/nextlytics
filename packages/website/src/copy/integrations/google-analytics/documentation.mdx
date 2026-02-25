@@ -4,14 +4,16 @@
 import { Nextlytics } from "@nextlytics/core/server";
 import { googleAnalyticsBackend } from "@nextlytics/core/backends/ga";
 
-export const { middleware, handlers, analytics } = Nextlytics({
+export const { middleware, analytics } = Nextlytics({
   backends: [
     googleAnalyticsBackend({
       // Required. Your GA4 Measurement ID.
       // Find it: GA4 Admin -> Data Streams -> Your Stream -> Measurement ID
       measurementId: "G-XXXXXXXXXX",
 
-      // Required for server-side events (everything except pageView).
+      // Optional but recommended for Measurement Protocol delivery.
+      // Required for server-origin custom events, and for client-origin custom
+      // events when preferClientSideForClientEvents is false.
       // Find it: GA4 Admin -> Data Streams -> Measurement Protocol API secrets
       apiSecret: "your-api-secret",
 
@@ -23,6 +25,11 @@ export const { middleware, handlers, analytics } = Nextlytics({
       // - "gaCookie" (default): Use _ga cookie set by gtag.js, fall back to anonymousUserId
       // - "anonymousUserId": Always use Nextlytics anonymousUserId
       clientIdSource: "gaCookie",
+
+      // Optional. For client-origin custom events:
+      // - true (default): send via gtag in browser
+      // - false: send via Measurement Protocol (requires apiSecret)
+      preferClientSideForClientEvents: true,
     }),
   ],
 });
@@ -34,7 +41,8 @@ Google Analytics requires page views to come from the browser. It needs to run J
 browser metadata and measure engagement. Because of this limitation, Nextlytics uses a **hybrid approach**:
 
 - **Page views** are sent client-side via a JavaScript snippet
-- **All other events** are sent server-side via the Measurement Protocol
+- **Server-origin custom events** are sent via Measurement Protocol when `apiSecret` is configured
+- **Client-origin custom events** are sent client-side by default
 
 ### Page View Events
 
@@ -46,9 +54,15 @@ The snippet maps to GA4's `page_view` event.
 
 ### Other Events
 
-All other events (purchases, form submissions, custom events) are sent server-side via the
-[Measurement Protocol](https://developers.google.com/analytics/devguides/collection/protocol/ga4).
-This means 100% delivery rate - no ad blockers can interfere.
+Custom events (purchases, form submissions, API/server events) can be delivered in two modes:
+
+- Server-origin events use
+  [Measurement Protocol](https://developers.google.com/analytics/devguides/collection/protocol/ga4)
+  when `apiSecret` is configured.
+- Client-origin events use `gtag('event', ...)` by default.
+
+To force Measurement Protocol for client-origin events too, set
+`preferClientSideForClientEvents: false` and provide `apiSecret`.
 
 ```typescript
 const { analytics } = await import("./nextlytics");
@@ -75,7 +89,7 @@ is identified, Nextlytics sends only `user_id` to GA4. For privacy, email, name,
 Custom traits are sent as user properties.
 
 ```typescript
-export const { middleware, handlers, analytics } = Nextlytics({
+export const { middleware, analytics } = Nextlytics({
   callbacks: {
     getUser: async (ctx) => {
       const session = await getSession(ctx);
@@ -101,7 +115,7 @@ export const { middleware, handlers, analytics } = Nextlytics({
   (gtag.js hasn't run). Nextlytics falls back to `anonymousUserId` for that request. Subsequent requests use
   the real `_ga` cookie.
 - **Page views require JavaScript.** This is a GA limitation, not Nextlytics.
-- **Real-time reports may be delayed.** Server-side events can take a few minutes to appear in GA4.
+- **Real-time reports may be delayed.** Measurement Protocol events can take a few minutes to appear in GA4.
 
 ## Debugging
 

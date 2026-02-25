@@ -4,7 +4,7 @@
 import { Nextlytics } from "@nextlytics/core/server";
 import { googleTagManagerBackend } from "@nextlytics/core/backends/gtm";
 
-export const { middleware, handlers, analytics } = Nextlytics({
+export const { middleware, analytics } = Nextlytics({
   backends: [
     googleTagManagerBackend({
       // Required. Your GTM Container ID.
@@ -37,9 +37,11 @@ dataLayer.push({
   eventId: "nl_abc123",
   page_path: "/products",
   page_title: "Products",
-  page_location: "https://example.com/products",
+  page_location: "example.com/products",
 });
 ```
+
+`page_location` is built from `serverContext.host + serverContext.path`.
 
 ### Custom Events
 
@@ -66,7 +68,7 @@ dataLayer.push({
 When a user is identified, their data is pushed to `dataLayer`:
 
 ```typescript
-export const { middleware, handlers, analytics } = Nextlytics({
+export const { middleware, analytics } = Nextlytics({
   callbacks: {
     getUser: async (ctx) => {
       const session = await getSession(ctx);
