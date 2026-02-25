@@ -5,12 +5,6 @@ on:
     branches:
       - main
       - stable
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to publish (e.g., v0.2.1). Leave empty for normal release-please flow.'
-        required: false
-        type: string
 
 jobs:
   release-please:
@@ -47,38 +41,6 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
-
-      - name: Build
-        run: bun run build
-
-      - name: Publish
-        working-directory: packages/core
-        run: |
-          npm install -g npm@latest
-          npm publish --provenance --access public
-
-  publish-manual:
-    if: github.event_name == 'workflow_dispatch' && inputs.tag != ''
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag }}
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
-
-      - name: Install dependencies
-        run: bun install
 
       - name: Build
         run: bun run build
