@@ -45,6 +45,7 @@ function createRequestContext(request: NextRequest): RequestContext {
   return {
     headers: request.headers,
     cookies: request.cookies,
+    path: request.nextUrl.pathname,
   };
 }
 
@@ -55,6 +56,19 @@ export async function getUserContext(
   if (!config.callbacks.getUser) return undefined;
   try {
     return (await config.callbacks.getUser(ctx)) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function getEventProps(
+  config: NextlyticsConfigWithDefaults,
+  ctx: RequestContext,
+  userContext?: UserContext
+): Promise<Record<string, unknown> | undefined> {
+  if (!config.callbacks.getProps) return undefined;
+  try {
+    return (await config.callbacks.getProps({ ...ctx, user: userContext })) || undefined;
   } catch {
     return undefined;
   }
@@ -114,6 +128,10 @@ async function handleClientInit(
     config,
   });
 
+  // Resolve getProps using the real page path (not /api/event)
+  const pageCtx: RequestContext = { ...ctx, path: serverContext.path };
+  const propsFromCallback = await getEventProps(config, pageCtx, userContext);
+
   // Soft navigation keeps the same pageRenderId but needs a fresh eventId
   // so client-side scripts depending on eventId can re-run per navigation.
   const isSoftNavigation = hctx.isSoftNavigation;
@@ -128,7 +146,7 @@ async function handleClientInit(
     serverContext,
     clientContext,
     userContext,
-    properties: {},
+    properties: { ...propsFromCallback },
   };
 
   if (isSoftNavigation) {
@@ -169,6 +187,10 @@ async function handleClientEvent(
     config,
   });
 
+  // Resolve getProps using the real page path (not /api/event)
+  const pageCtx: RequestContext = { ...ctx, path: serverContext.path };
+  const propsFromCallback = await getEventProps(config, pageCtx, userContext);
+
   const event: NextlyticsEvent = {
     origin: "client",
     eventId: generateId(),
@@ -179,7 +201,7 @@ async function handleClientEvent(
     serverContext,
     clientContext,
     userContext,
-    properties: props || {},
+    properties: { ...propsFromCallback, ...props },
   };
 
   const { clientActions, completion } = dispatchEvent(event, ctx);

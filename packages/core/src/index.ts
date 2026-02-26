@@ -2,6 +2,7 @@ export { Nextlytics } from "./server";
 export { getNextlyticsProps } from "./pages-router";
 export { NextlyticsClient, useNextlytics, type NextlyticsContext } from "./client";
 export { loggingBackend } from "./backends/logging";
+export { pathMatcher, type PathMatcherOptions } from "./path-matcher";
 export type {
   NextlyticsConfig,
   NextlyticsResult,
