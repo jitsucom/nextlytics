@@ -80,13 +80,13 @@ export function createNextlyticsMiddleware(
 
     // Skip internal paths, prefetch, and static files
     if (reqInfo.isNextjsInternal || reqInfo.isPrefetch || reqInfo.isStaticFile) {
-      return NextResponse.next();
+      return undefined;
     }
 
     // Skip non-page-navigation, non-API requests (e.g. RSC fetches).
     // Soft navigations are tracked via the client /api/event request.
     if (!reqInfo.isPageNavigation && !config.isApiPath(pathname)) {
-      return NextResponse.next();
+      return undefined;
     }
 
     const pageRenderId = generateId();
