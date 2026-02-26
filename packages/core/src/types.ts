@@ -109,6 +109,7 @@ export type AnonymousUserResult = {
 export type RequestContext = {
   headers: Headers;
   cookies: Pick<RequestCookies, "get" | "getAll" | "has">;
+  path: string;
 };
 
 export type NextlyticsPlugin = {
@@ -171,6 +172,14 @@ export type NextlyticsConfig = {
       ctx: RequestContext;
       originalAnonymousUserId?: string;
     }) => Promise<AnonymousUserResult>;
+    /**
+     * Derive extra event properties from the request context.
+     * Called on every request; the returned object is merged into `event.properties`.
+     * User-provided properties (e.g. from `sendEvent` or client custom events) take priority.
+     */
+    getProps?: (
+      ctx: RequestContext & { user?: UserContext }
+    ) => Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined>;
   };
   /** Analytics backends to send events to */
   backends?: BackendConfigEntry[];

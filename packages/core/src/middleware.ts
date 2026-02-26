@@ -17,6 +17,7 @@ import { resolveAnonymousUser } from "./anonymous-user";
 import {
   handleEventPost,
   getUserContext,
+  getEventProps,
   type DispatchEvent,
   type UpdateEvent,
 } from "./api-handler";
@@ -25,6 +26,7 @@ function createRequestContext(request: NextRequest): RequestContext {
   return {
     headers: request.headers,
     cookies: request.cookies,
+    path: request.nextUrl.pathname,
   };
 }
 
@@ -78,13 +80,13 @@ export function createNextlyticsMiddleware(
 
     // Skip internal paths, prefetch, and static files
     if (reqInfo.isNextjsInternal || reqInfo.isPrefetch || reqInfo.isStaticFile) {
-      return NextResponse.next();
+      return undefined;
     }
 
     // Skip non-page-navigation, non-API requests (e.g. RSC fetches).
     // Soft navigations are tracked via the client /api/event request.
     if (!reqInfo.isPageNavigation && !config.isApiPath(pathname)) {
-      return NextResponse.next();
+      return undefined;
     }
 
     const pageRenderId = generateId();
@@ -120,12 +122,14 @@ export function createNextlyticsMiddleware(
     }
 
     const userContext = await getUserContext(config, ctx);
+    const extraProps = await getEventProps(config, ctx, userContext);
     const pageViewEvent = createPageViewEvent(
       pageRenderId,
       serverContext,
       isApiPath,
       userContext,
-      anonId
+      anonId,
+      extraProps
     );
 
     // Dispatch to "on-request" backends only - "on-page-load" backends dispatch later
@@ -157,7 +161,8 @@ function createPageViewEvent(
   serverContext: ServerEventContext,
   isApiPath: boolean,
   userContext?: UserContext,
-  anonymousUserId?: string
+  anonymousUserId?: string,
+  extraProps?: Record<string, unknown>
 ): NextlyticsEvent {
   const eventType = isApiPath ? "apiCall" : "pageView";
   return {
@@ -168,6 +173,6 @@ function createPageViewEvent(
     anonymousUserId,
     serverContext,
     userContext,
-    properties: {},
+    properties: { ...extraProps },
   };
 }

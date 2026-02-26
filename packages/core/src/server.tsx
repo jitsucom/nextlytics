@@ -22,6 +22,7 @@ import type {
 import { logConfigWarnings, validateConfig, withDefaults } from "./config-helpers";
 import { createNextlyticsMiddleware } from "./middleware";
 import { generateId } from "./uitils";
+import { getEventProps } from "./api-handler";
 
 type ResolvedBackend = {
   backend: NextlyticsBackend;
@@ -103,6 +104,7 @@ export async function createRequestContext(): Promise<RequestContext> {
   return {
     cookies: _cookies,
     headers: _headers,
+    path: _headers.get("x-nl-pathname") || "",
   };
 }
 
@@ -262,7 +264,11 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     const pageRenderId = headersList.get(headerNames.pageRenderId);
 
     const serverContext = createServerContextFromHeaders(headersList);
-    const ctx: RequestContext = { headers: headersList, cookies: cookieStore };
+    const ctx: RequestContext = {
+      headers: headersList,
+      cookies: cookieStore,
+      path: headersList.get(headerNames.pathname) || "",
+    };
 
     // Resolve anonymous user ID
     const { anonId: anonymousUserId } = await resolveAnonymousUser({ ctx, serverContext, config });
@@ -276,6 +282,8 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
         // Ignore errors from getUser
       }
     }
+
+    const propsFromCallback = await getEventProps(config, ctx, userContext);
 
     return {
       sendEvent: async (
@@ -296,7 +304,7 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
           anonymousUserId,
           serverContext,
           userContext,
-          properties: opts?.props || {},
+          properties: { ...propsFromCallback, ...opts?.props },
         };
         await dispatchEventInternal(event, ctx);
 
