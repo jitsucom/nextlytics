@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/jitsucom/nextlytics/compare/v0.3.1...v0.4.0) (2026-02-26)
+
+
+### Features
+
+* add getProps callback and pathMatcher utility ([4427598](https://github.com/jitsucom/nextlytics/commit/4427598f757650e7683475712ea269f2f88ea66e))
+* add getProps callback and pathMatcher utility ([d6bd8a4](https://github.com/jitsucom/nextlytics/commit/d6bd8a47327f03352e7f93689b19c8c7e13ae918))
+
+
+### Bug Fixes
+
+* return undefined for early-return middleware paths ([ab0ce27](https://github.com/jitsucom/nextlytics/commit/ab0ce277384cd4fcbdeae3526d22c4a47cdf8e75))
+
 ## [0.3.1](https://github.com/jitsucom/nextlytics/compare/v0.3.0...v0.3.1) (2026-02-25)
 
 
