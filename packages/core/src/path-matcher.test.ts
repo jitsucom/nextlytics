@@ -70,9 +70,7 @@ describe("pathMatcher", () => {
     });
 
     it("matches full pattern in prefix mode", () => {
-      expect(
-        pathMatcher("/[workspace]/[project]", "/acme/myproject", { prefix: true })
-      ).toEqual({
+      expect(pathMatcher("/[workspace]/[project]", "/acme/myproject", { prefix: true })).toEqual({
         workspace: "acme",
         project: "myproject",
       });
