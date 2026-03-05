@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/jitsucom/nextlytics/compare/v0.4.0...v0.4.1) (2026-03-05)
+
+
+### Bug Fixes
+
+* suppress false "middleware not added" warning on RSC navigations ([9515437](https://github.com/jitsucom/nextlytics/commit/951543739e5923f0a1951801f2f239e63330914b))
+
 ## [0.4.0](https://github.com/jitsucom/nextlytics/compare/v0.3.1...v0.4.0) (2026-02-26)
 
 
