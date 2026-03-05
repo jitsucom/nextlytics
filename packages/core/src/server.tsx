@@ -243,7 +243,10 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     const ctx = restoreServerComponentContext(headersList);
 
     if (!ctx) {
-      console.warn("[Nextlytics] nextlyticsMiddleware should be added in order for Server to work");
+      // x-nl-page-render-id absent → check if middleware is at least active
+      if (!headersList.get(headerNames.active)) {
+        console.warn("[Nextlytics] nextlyticsMiddleware should be added in order for Server to work");
+      }
       return <>{children}</>;
     }
 

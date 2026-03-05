@@ -2,6 +2,7 @@ import type { NextMiddleware, NextRequest } from "next/server";
 import { NextResponse, after } from "next/server";
 import {
   LAST_PAGE_RENDER_ID_COOKIE,
+  headerNames,
   serializeServerComponentContext,
 } from "./server-component-context";
 import type {
@@ -80,13 +81,17 @@ export function createNextlyticsMiddleware(
 
     // Skip internal paths, prefetch, and static files
     if (reqInfo.isNextjsInternal || reqInfo.isPrefetch || reqInfo.isStaticFile) {
-      return undefined;
+      const response = NextResponse.next();
+      response.headers.set(headerNames.active, "1");
+      return response;
     }
 
     // Skip non-page-navigation, non-API requests (e.g. RSC fetches).
     // Soft navigations are tracked via the client /api/event request.
     if (!reqInfo.isPageNavigation && !config.isApiPath(pathname)) {
-      return undefined;
+      const response = NextResponse.next();
+      response.headers.set(headerNames.active, "1");
+      return response;
     }
 
     const pageRenderId = generateId();

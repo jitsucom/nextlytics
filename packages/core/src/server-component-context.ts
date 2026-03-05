@@ -8,6 +8,7 @@ const headerNames = {
   search: `${HEADER_PREFIX}search`,
   pageRenderId: `${HEADER_PREFIX}page-render-id`,
   isSoftNavigation: `${HEADER_PREFIX}is-soft-nav`,
+  active: `${HEADER_PREFIX}active`,
   scripts: `${HEADER_PREFIX}scripts`,
 } as const;
 
