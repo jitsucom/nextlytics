@@ -164,7 +164,7 @@ export type NextlyticsConfig = {
   isApiPath?: (path: string) => boolean;
   /** Endpoint for client events. Default: "/api/event" */
   eventEndpoint?: string;
-  callbacks: {
+  callbacks?: {
     /** Resolve authenticated user from request context */
     getUser?: (ctx: RequestContext) => Promise<UserContext | undefined>;
     /** Override anonymous user ID generation */
