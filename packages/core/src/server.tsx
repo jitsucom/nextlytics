@@ -245,7 +245,9 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     if (!ctx) {
       // x-nl-page-render-id absent → check if middleware is at least active
       if (!headersList.get(headerNames.active)) {
-        console.warn("[Nextlytics] nextlyticsMiddleware should be added in order for Server to work");
+        console.warn(
+          "[Nextlytics] nextlyticsMiddleware should be added in order for Server to work"
+        );
       }
       return <>{children}</>;
     }
