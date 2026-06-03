@@ -18,17 +18,14 @@ function MyApp({ Component, pageProps, nextlyticsCtx }: MyAppProps) {
 MyApp.getInitialProps = async (appContext: AppContext) => {
   const { ctx } = appContext;
 
-  // Only get nextlytics props on server-side (when req is available)
-  let nextlyticsCtx: NextlyticsContext = { requestId: "" };
-  if (ctx.req) {
-    nextlyticsCtx = getNextlyticsProps({ req: { headers: ctx.req.headers } });
-  }
-
+  // getInitialProps re-runs in the browser on client-side navigation, where
+  // there is no `ctx.req`. getNextlyticsProps handles that and returns an empty
+  // context; the client keeps the templates and scripts it already has.
   return {
     pageProps: appContext.Component.getInitialProps
       ? await appContext.Component.getInitialProps(ctx)
       : {},
-    nextlyticsCtx,
+    nextlyticsCtx: getNextlyticsProps(ctx),
   };
 };
 

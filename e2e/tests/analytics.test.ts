@@ -194,6 +194,33 @@ describe.each(versions)("%s", (version) => {
       await page.close();
     });
 
+    it("compiles and runs client-side script templates on initial load", async () => {
+      // Regression guard for template delivery. App Router gets templates from
+      // NextlyticsServer; Pages Router can't read config in getNextlyticsProps,
+      // so it receives them in the /api/event response. Either way the scripts
+      // must compile and run — without the template, __nextlyticsTestInit stays
+      // undefined and this times out.
+      const page = await testApp.newPage();
+
+      await testApp.visitHome(page);
+
+      await page.waitForFunction(() => window.__nextlyticsTestInit !== undefined, undefined, {
+        timeout: 5000,
+      });
+
+      const counters = await page.evaluate(() => ({
+        init: window.__nextlyticsTestInit,
+        config: window.__nextlyticsTestConfig,
+        event: window.__nextlyticsTestEvent,
+      }));
+
+      expect(counters.init).toBeGreaterThanOrEqual(1);
+      expect(counters.config).toBeGreaterThanOrEqual(1);
+      expect(counters.event).toBeGreaterThanOrEqual(1);
+
+      await page.close();
+    });
+
     it("script modes work correctly during soft navigation", async () => {
       // This test only applies to App Router (soft navigation with <Link>)
       if (routerType !== "app") return;
@@ -264,11 +291,11 @@ describe.each(versions)("%s", (version) => {
   });
 });
 
-// Type augmentation for test globals
+// Type augmentation for test globals (set by the console-test backend scripts)
 declare global {
   interface Window {
-    __nextlyticsTestOnce?: number;
-    __nextlyticsTestParamsChange?: number;
-    __nextlyticsTestEveryRender?: number;
+    __nextlyticsTestInit?: number;
+    __nextlyticsTestConfig?: number;
+    __nextlyticsTestEvent?: number;
   }
 }
