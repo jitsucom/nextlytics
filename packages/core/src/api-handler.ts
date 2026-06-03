@@ -8,6 +8,7 @@ import type {
   ClientContext,
   ClientRequest,
   DispatchResult,
+  JavascriptTemplate,
   PageViewDelivery,
   NextlyticsEvent,
   RequestContext,
@@ -30,6 +31,9 @@ export type UpdateEvent = (
   ctx: RequestContext
 ) => Promise<void>;
 
+/** Collect the client-side templates from the configured backends. */
+export type CollectTemplates = (ctx: RequestContext) => Record<string, JavascriptTemplate>;
+
 type HandlerContext = {
   pageRenderId: string;
   isSoftNavigation: boolean;
@@ -39,6 +43,7 @@ type HandlerContext = {
   config: NextlyticsConfigWithDefaults;
   dispatchEvent: DispatchEvent;
   updateEvent: UpdateEvent;
+  collectTemplates: CollectTemplates;
 };
 
 function createRequestContext(request: NextRequest): RequestContext {
@@ -118,6 +123,7 @@ async function handleClientInit(
     config,
     dispatchEvent,
     updateEvent,
+    collectTemplates,
   } = hctx;
   const { clientContext } = request;
   const serverContext = reconstructServerContext(apiCallServerContext, clientContext);
@@ -158,6 +164,7 @@ async function handleClientInit(
     return Response.json({
       ok: true,
       items: filterScripts(actions),
+      templates: collectTemplates(ctx),
     });
   }
 
@@ -167,14 +174,15 @@ async function handleClientInit(
   after(() => completion);
   after(() => updateEvent(pageRenderId, { clientContext, userContext, anonymousUserId }, ctx));
 
-  return Response.json({ ok: true });
+  return Response.json({ ok: true, templates: collectTemplates(ctx) });
 }
 
 async function handleClientEvent(
   request: Extract<ClientRequest, { type: "custom-event" }>,
   hctx: HandlerContext
 ): Promise<Response> {
-  const { pageRenderId, ctx, apiCallServerContext, userContext, config, dispatchEvent } = hctx;
+  const { pageRenderId, ctx, apiCallServerContext, userContext, config, dispatchEvent, collectTemplates } =
+    hctx;
   const { clientContext, name, props, collectedAt } = request;
 
   const serverContext = clientContext
@@ -208,14 +216,15 @@ async function handleClientEvent(
   const actions = await clientActions;
   after(() => completion);
 
-  return Response.json({ ok: true, items: filterScripts(actions) });
+  return Response.json({ ok: true, items: filterScripts(actions), templates: collectTemplates(ctx) });
 }
 
 export async function handleEventPost(
   request: NextRequest,
   config: NextlyticsConfigWithDefaults,
   dispatchEvent: DispatchEvent,
-  updateEvent: UpdateEvent
+  updateEvent: UpdateEvent,
+  collectTemplates: CollectTemplates
 ): Promise<Response> {
   const softNavHeader = request.headers.get(analyticsHeaders.isSoftNavigation);
   const isSoftNavigation = softNavHeader === "1";
@@ -252,6 +261,7 @@ export async function handleEventPost(
     config,
     dispatchEvent,
     updateEvent,
+    collectTemplates,
   };
 
   const bodyType = body.type;

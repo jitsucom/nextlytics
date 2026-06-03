@@ -19,6 +19,7 @@ import {
   handleEventPost,
   getUserContext,
   getEventProps,
+  type CollectTemplates,
   type DispatchEvent,
   type UpdateEvent,
 } from "./api-handler";
@@ -34,7 +35,8 @@ function createRequestContext(request: NextRequest): RequestContext {
 export function createNextlyticsMiddleware(
   config: NextlyticsConfigWithDefaults,
   dispatchEvent: DispatchEvent,
-  updateEvent: UpdateEvent
+  updateEvent: UpdateEvent,
+  collectTemplates: CollectTemplates
 ): NextMiddleware {
   const { eventEndpoint } = config;
 
@@ -74,7 +76,7 @@ export function createNextlyticsMiddleware(
     // Handle event endpoint directly in middleware
     if (pathname === eventEndpoint) {
       if (request.method === "POST") {
-        return handleEventPost(request, config, dispatchEvent, updateEvent);
+        return handleEventPost(request, config, dispatchEvent, updateEvent, collectTemplates);
       }
       return Response.json({ error: "Method not allowed" }, { status: 405 });
     }

@@ -9,6 +9,7 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
 } from "react";
 import { useNavigation, debug, InjectScript, type InjectScriptProps } from "./client-utils";
 import type {
@@ -251,9 +252,9 @@ async function sendEventToServer(
       return { ok: false };
     }
 
-    // Parse response to get scripts
+    // Parse response to get scripts (and templates, for Pages Router clients)
     const data = await response.json().catch(() => ({ ok: response.ok }));
-    return { ok: data.ok ?? response.ok, items: data.items };
+    return { ok: data.ok ?? response.ok, items: data.items, templates: data.templates };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       return { ok: false };
@@ -264,11 +265,34 @@ async function sendEventToServer(
 }
 
 export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: ReactNode }) {
-  const { requestId, scripts: initialScripts = [], templates = {} } = props.ctx;
+  const { requestId, scripts: initialScripts = [] } = props.ctx;
 
   // Refs for dynamic scripts (from sendEvent calls) - stable, no re-renders
   const scriptsRef = useRef<TemplatizedScriptInsertion<unknown>[]>([]);
   const subscribersRef = useRef<Set<() => void>>(new Set());
+
+  // Templates can arrive from two places: the ctx prop (App Router's
+  // NextlyticsServer collects them from config) and the /api/event response
+  // (Pages Router, where getNextlyticsProps has no access to config). Hold them
+  // in state and merge from whichever source supplies them, so they survive
+  // client-side navigations regardless of router.
+  const [templates, setTemplates] = useState<Record<string, JavascriptTemplate>>(
+    () => props.ctx.templates ?? {}
+  );
+  const mergeTemplates = useCallback((incoming?: Record<string, JavascriptTemplate>) => {
+    if (!incoming) return;
+    const keys = Object.keys(incoming);
+    if (keys.length === 0) return;
+    setTemplates((prev) => {
+      const hasNew = keys.some((k) => prev[k] !== incoming[k]);
+      return hasNew ? { ...prev, ...incoming } : prev;
+    });
+  }, []);
+
+  // Merge templates supplied via the ctx prop (App Router).
+  useEffect(() => {
+    mergeTemplates(props.ctx.templates);
+  }, [props.ctx.templates, mergeTemplates]);
 
   const addScripts = useCallback((newScripts: TemplatizedScriptInsertion<unknown>[]) => {
     debug("Adding scripts", {
@@ -293,8 +317,9 @@ export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: Rea
       requestId,
       { type: "page-view", clientContext, softNavigation: softNavigation || undefined },
       { signal, isSoftNavigation: softNavigation }
-    ).then(({ items }) => {
+    ).then(({ items, templates: responseTemplates }) => {
       debug("page-view response", { scriptsCount: items?.length ?? 0 });
+      mergeTemplates(responseTemplates);
       if (items?.length) addScripts(items);
     });
   });

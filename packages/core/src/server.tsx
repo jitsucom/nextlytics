@@ -235,7 +235,12 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     return updateEventInternal(eventId, patch, ctx);
   };
 
-  const middleware = createNextlyticsMiddleware(config, dispatchEventInternal, updateEventInternal);
+  const middleware = createNextlyticsMiddleware(
+    config,
+    dispatchEventInternal,
+    updateEventInternal,
+    (ctx) => collectTemplates(config, ctx)
+  );
 
   /** Server component that provides analytics context to the app */
   async function Server({ children }: { children: ReactNode }) {
