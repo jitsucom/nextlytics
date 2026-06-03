@@ -10,6 +10,9 @@ const headerNames = {
   isSoftNavigation: `${HEADER_PREFIX}is-soft-nav`,
   active: `${HEADER_PREFIX}active`,
   scripts: `${HEADER_PREFIX}scripts`,
+  /** Comma-separated template ids the client already holds, so the server only
+   * returns the ones it's missing (see api-handler / client templates merge). */
+  knownTemplates: `${HEADER_PREFIX}known-templates`,
 } as const;
 
 export const LAST_PAGE_RENDER_ID_COOKIE = "last-page-render-id";

@@ -44,7 +44,24 @@ type HandlerContext = {
   dispatchEvent: DispatchEvent;
   updateEvent: UpdateEvent;
   collectTemplates: CollectTemplates;
+  /** Template ids the client already holds (from the known-templates header). */
+  knownTemplateIds: Set<string>;
 };
+
+/**
+ * Collect the templates for this request and drop the ones the client already
+ * has. App Router clients already hold the full set (from the ctx prop), so they
+ * get nothing back; a Pages Router client receives each template once. Returns
+ * undefined when there is nothing new, to keep it out of the JSON response.
+ */
+function newTemplatesFor(hctx: HandlerContext): Record<string, JavascriptTemplate> | undefined {
+  const all = hctx.collectTemplates(hctx.ctx);
+  const missing: Record<string, JavascriptTemplate> = {};
+  for (const [id, template] of Object.entries(all)) {
+    if (!hctx.knownTemplateIds.has(id)) missing[id] = template;
+  }
+  return Object.keys(missing).length > 0 ? missing : undefined;
+}
 
 function createRequestContext(request: NextRequest): RequestContext {
   return {
@@ -123,7 +140,6 @@ async function handleClientInit(
     config,
     dispatchEvent,
     updateEvent,
-    collectTemplates,
   } = hctx;
   const { clientContext } = request;
   const serverContext = reconstructServerContext(apiCallServerContext, clientContext);
@@ -164,7 +180,7 @@ async function handleClientInit(
     return Response.json({
       ok: true,
       items: filterScripts(actions),
-      templates: collectTemplates(ctx),
+      templates: newTemplatesFor(hctx),
     });
   }
 
@@ -174,15 +190,14 @@ async function handleClientInit(
   after(() => completion);
   after(() => updateEvent(pageRenderId, { clientContext, userContext, anonymousUserId }, ctx));
 
-  return Response.json({ ok: true, templates: collectTemplates(ctx) });
+  return Response.json({ ok: true, templates: newTemplatesFor(hctx) });
 }
 
 async function handleClientEvent(
   request: Extract<ClientRequest, { type: "custom-event" }>,
   hctx: HandlerContext
 ): Promise<Response> {
-  const { pageRenderId, ctx, apiCallServerContext, userContext, config, dispatchEvent, collectTemplates } =
-    hctx;
+  const { pageRenderId, ctx, apiCallServerContext, userContext, config, dispatchEvent } = hctx;
   const { clientContext, name, props, collectedAt } = request;
 
   const serverContext = clientContext
@@ -216,7 +231,11 @@ async function handleClientEvent(
   const actions = await clientActions;
   after(() => completion);
 
-  return Response.json({ ok: true, items: filterScripts(actions), templates: collectTemplates(ctx) });
+  return Response.json({
+    ok: true,
+    items: filterScripts(actions),
+    templates: newTemplatesFor(hctx),
+  });
 }
 
 export async function handleEventPost(
@@ -244,6 +263,16 @@ export async function handleEventPost(
   const apiCallServerContext = createServerContext(request);
   const userContext = await getUserContext(config, ctx);
 
+  const knownTemplatesHeader = request.headers.get(analyticsHeaders.knownTemplates);
+  const knownTemplateIds = new Set(
+    knownTemplatesHeader
+      ? knownTemplatesHeader
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean)
+      : []
+  );
+
   const cookiePageRenderId = request.cookies.get(LAST_PAGE_RENDER_ID_COOKIE)?.value;
   const pageRenderId = isSoftNavigation ? (cookiePageRenderId ?? generateId()) : pageRenderIdHeader;
   if (isSoftNavigation && !cookiePageRenderId && config.debug) {
@@ -262,6 +291,7 @@ export async function handleEventPost(
     dispatchEvent,
     updateEvent,
     collectTemplates,
+    knownTemplateIds,
   };
 
   const bodyType = body.type;

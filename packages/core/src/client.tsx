@@ -42,6 +42,8 @@ type NextlyticsContextValue = {
   addScripts: (scripts: TemplatizedScriptInsertion<unknown>[]) => void;
   scriptsRef: React.MutableRefObject<TemplatizedScriptInsertion<unknown>[]>;
   subscribersRef: React.MutableRefObject<Set<() => void>>;
+  mergeTemplates: (incoming?: Record<string, JavascriptTemplate>) => void;
+  knownTemplateIdsRef: React.MutableRefObject<string[]>;
 };
 
 const NextlyticsContext = createContext<NextlyticsContextValue | null>(null);
@@ -228,7 +230,11 @@ function NextlyticsScripts({
 async function sendEventToServer(
   requestId: string,
   request: ClientRequest,
-  { signal, isSoftNavigation }: { signal?: AbortSignal; isSoftNavigation?: boolean } = {}
+  {
+    signal,
+    isSoftNavigation,
+    knownTemplateIds,
+  }: { signal?: AbortSignal; isSoftNavigation?: boolean; knownTemplateIds?: string[] } = {}
 ): Promise<ClientRequestResult> {
   try {
     const headers: Record<string, string> = {
@@ -237,6 +243,11 @@ async function sendEventToServer(
     };
     if (isSoftNavigation) {
       headers[headerNames.isSoftNavigation] = "1";
+    }
+    // Tell the server which templates we already have so it only sends new ones.
+    // App Router clients already hold the full set, so nothing comes back.
+    if (knownTemplateIds?.length) {
+      headers[headerNames.knownTemplates] = knownTemplateIds.join(",");
     }
     const response = await fetch("/api/event", {
       method: "POST",
@@ -294,6 +305,14 @@ export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: Rea
     mergeTemplates(props.ctx.templates);
   }, [props.ctx.templates, mergeTemplates]);
 
+  // Mirror the template ids into a ref so sendEventToServer can tell the server
+  // which templates we already have (sent as a header), without re-creating the
+  // request callbacks on every merge.
+  const knownTemplateIdsRef = useRef<string[]>(Object.keys(props.ctx.templates ?? {}));
+  useEffect(() => {
+    knownTemplateIdsRef.current = Object.keys(templates);
+  }, [templates]);
+
   const addScripts = useCallback((newScripts: TemplatizedScriptInsertion<unknown>[]) => {
     debug("Adding scripts", {
       newCount: newScripts.length,
@@ -305,8 +324,16 @@ export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: Rea
 
   // Context value is stable - refs don't change identity
   const contextValue = useMemo<NextlyticsContextValue>(
-    () => ({ requestId, templates, addScripts, scriptsRef, subscribersRef }),
-    [requestId, templates, addScripts]
+    () => ({
+      requestId,
+      templates,
+      addScripts,
+      scriptsRef,
+      subscribersRef,
+      mergeTemplates,
+      knownTemplateIdsRef,
+    }),
+    [requestId, templates, addScripts, mergeTemplates]
   );
 
   // Send page-view on mount and soft navigations
@@ -316,7 +343,7 @@ export function NextlyticsClient(props: { ctx: NextlyticsContext; children?: Rea
     sendEventToServer(
       requestId,
       { type: "page-view", clientContext, softNavigation: softNavigation || undefined },
-      { signal, isSoftNavigation: softNavigation }
+      { signal, isSoftNavigation: softNavigation, knownTemplateIds: knownTemplateIdsRef.current }
     ).then(({ items, templates: responseTemplates }) => {
       debug("page-view response", { scriptsCount: items?.length ?? 0 });
       mergeTemplates(responseTemplates);
@@ -349,28 +376,33 @@ export function useNextlytics(): NextlyticsClientApi {
     );
   }
 
-  const { requestId, addScripts } = context;
+  const { requestId, addScripts, mergeTemplates, knownTemplateIdsRef } = context;
 
   const sendEvent = useCallback(
     async (
       eventName: string,
       opts?: { props?: Record<string, unknown> }
     ): Promise<{ ok: boolean }> => {
-      const result = await sendEventToServer(requestId, {
-        type: "custom-event",
-        name: eventName,
-        props: opts?.props,
-        collectedAt: new Date().toISOString(),
-        clientContext: createClientContext(),
-      });
+      const result = await sendEventToServer(
+        requestId,
+        {
+          type: "custom-event",
+          name: eventName,
+          props: opts?.props,
+          collectedAt: new Date().toISOString(),
+          clientContext: createClientContext(),
+        },
+        { knownTemplateIds: knownTemplateIdsRef.current }
+      );
 
+      mergeTemplates(result.templates);
       if (result.items && result.items.length > 0) {
         addScripts(result.items);
       }
 
       return { ok: result.ok };
     },
-    [requestId, addScripts]
+    [requestId, addScripts, mergeTemplates, knownTemplateIdsRef]
   );
 
   return { sendEvent };
