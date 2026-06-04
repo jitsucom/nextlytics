@@ -2,7 +2,10 @@ import type { NextlyticsContext } from "./client";
 import { restoreServerComponentContext } from "./server-component-context";
 
 export type PagesRouterContext = {
-  req?: { headers: Record<string, string | string[] | undefined>; cookies?: Record<string, string> };
+  req?: {
+    headers: Record<string, string | string[] | undefined>;
+    cookies?: Record<string, string>;
+  };
 };
 
 /**
