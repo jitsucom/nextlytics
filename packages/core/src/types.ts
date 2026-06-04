@@ -292,6 +292,9 @@ export type ClientRequest =
 export type ClientRequestResult = {
   ok: boolean;
   items?: ClientActionItem[];
+  /** Client-side templates from the backends, so Pages Router clients (which
+   * can't read them from config) can compile the script insertions. */
+  templates?: Record<string, JavascriptTemplate>;
 };
 
 /** Return value from Nextlytics() */

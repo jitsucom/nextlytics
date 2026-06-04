@@ -8,6 +8,7 @@ import type {
   ClientContext,
   ClientRequest,
   DispatchResult,
+  JavascriptTemplate,
   PageViewDelivery,
   NextlyticsEvent,
   RequestContext,
@@ -30,6 +31,9 @@ export type UpdateEvent = (
   ctx: RequestContext
 ) => Promise<void>;
 
+/** Collect the client-side templates from the configured backends. */
+export type CollectTemplates = (ctx: RequestContext) => Record<string, JavascriptTemplate>;
+
 type HandlerContext = {
   pageRenderId: string;
   isSoftNavigation: boolean;
@@ -39,7 +43,25 @@ type HandlerContext = {
   config: NextlyticsConfigWithDefaults;
   dispatchEvent: DispatchEvent;
   updateEvent: UpdateEvent;
+  collectTemplates: CollectTemplates;
+  /** Template ids the client already holds (from the known-templates header). */
+  knownTemplateIds: Set<string>;
 };
+
+/**
+ * Collect the templates for this request and drop the ones the client already
+ * has. App Router clients already hold the full set (from the ctx prop), so they
+ * get nothing back; a Pages Router client receives each template once. Returns
+ * undefined when there is nothing new, to keep it out of the JSON response.
+ */
+function newTemplatesFor(hctx: HandlerContext): Record<string, JavascriptTemplate> | undefined {
+  const all = hctx.collectTemplates(hctx.ctx);
+  const missing: Record<string, JavascriptTemplate> = {};
+  for (const [id, template] of Object.entries(all)) {
+    if (!hctx.knownTemplateIds.has(id)) missing[id] = template;
+  }
+  return Object.keys(missing).length > 0 ? missing : undefined;
+}
 
 function createRequestContext(request: NextRequest): RequestContext {
   return {
@@ -158,6 +180,7 @@ async function handleClientInit(
     return Response.json({
       ok: true,
       items: filterScripts(actions),
+      templates: newTemplatesFor(hctx),
     });
   }
 
@@ -167,7 +190,7 @@ async function handleClientInit(
   after(() => completion);
   after(() => updateEvent(pageRenderId, { clientContext, userContext, anonymousUserId }, ctx));
 
-  return Response.json({ ok: true });
+  return Response.json({ ok: true, templates: newTemplatesFor(hctx) });
 }
 
 async function handleClientEvent(
@@ -208,14 +231,19 @@ async function handleClientEvent(
   const actions = await clientActions;
   after(() => completion);
 
-  return Response.json({ ok: true, items: filterScripts(actions) });
+  return Response.json({
+    ok: true,
+    items: filterScripts(actions),
+    templates: newTemplatesFor(hctx),
+  });
 }
 
 export async function handleEventPost(
   request: NextRequest,
   config: NextlyticsConfigWithDefaults,
   dispatchEvent: DispatchEvent,
-  updateEvent: UpdateEvent
+  updateEvent: UpdateEvent,
+  collectTemplates: CollectTemplates
 ): Promise<Response> {
   const softNavHeader = request.headers.get(analyticsHeaders.isSoftNavigation);
   const isSoftNavigation = softNavHeader === "1";
@@ -235,6 +263,16 @@ export async function handleEventPost(
   const apiCallServerContext = createServerContext(request);
   const userContext = await getUserContext(config, ctx);
 
+  const knownTemplatesHeader = request.headers.get(analyticsHeaders.knownTemplates);
+  const knownTemplateIds = new Set(
+    knownTemplatesHeader
+      ? knownTemplatesHeader
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean)
+      : []
+  );
+
   const cookiePageRenderId = request.cookies.get(LAST_PAGE_RENDER_ID_COOKIE)?.value;
   const pageRenderId = isSoftNavigation ? (cookiePageRenderId ?? generateId()) : pageRenderIdHeader;
   if (isSoftNavigation && !cookiePageRenderId && config.debug) {
@@ -252,6 +290,8 @@ export async function handleEventPost(
     config,
     dispatchEvent,
     updateEvent,
+    collectTemplates,
+    knownTemplateIds,
   };
 
   const bodyType = body.type;

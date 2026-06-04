@@ -235,7 +235,12 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     return updateEventInternal(eventId, patch, ctx);
   };
 
-  const middleware = createNextlyticsMiddleware(config, dispatchEventInternal, updateEventInternal);
+  const middleware = createNextlyticsMiddleware(
+    config,
+    dispatchEventInternal,
+    updateEventInternal,
+    (ctx) => collectTemplates(config, ctx)
+  );
 
   /** Server component that provides analytics context to the app */
   async function Server({ children }: { children: ReactNode }) {
@@ -245,7 +250,9 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     if (!ctx) {
       // x-nl-page-render-id absent → check if middleware is at least active
       if (!headersList.get(headerNames.active)) {
-        console.warn("[Nextlytics] nextlyticsMiddleware should be added in order for Server to work");
+        console.warn(
+          "[Nextlytics] nextlyticsMiddleware should be added in order for Server to work"
+        );
       }
       return <>{children}</>;
     }
