@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/jitsucom/nextlytics/compare/v0.4.1...v0.4.2) (2026-06-04)
+
+
+### Bug Fixes
+
+* deliver client-side templates to Pages Router clients ([#37](https://github.com/jitsucom/nextlytics/issues/37)) ([b515be4](https://github.com/jitsucom/nextlytics/commit/b515be4cde41db4f78d51525a7ed1a46dbc4e915))
+
 ## [0.4.1](https://github.com/jitsucom/nextlytics/compare/v0.4.0...v0.4.1) (2026-03-05)
 
 
