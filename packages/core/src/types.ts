@@ -255,7 +255,13 @@ export type NextlyticsServerSide = {
   /** Send custom event from a server component, server action, or API route */
   sendEvent: (
     eventName: string,
-    opts?: { props?: Record<string, unknown> }
+    opts?: {
+      props?: Record<string, unknown>;
+      /** Identify the event's user explicitly. Overrides callbacks.getUser for
+       * this event — e.g. an email recipient resolved from a link, where the
+       * request has no session to derive identity from. */
+      user?: UserContext;
+    }
   ) => Promise<{ ok: boolean }>;
 };
 

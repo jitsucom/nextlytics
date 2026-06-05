@@ -25,6 +25,7 @@ import type {
   NextlyticsResult,
   RequestContext,
   ServerEventContext,
+  UserContext,
 } from "./types";
 import { logConfigWarnings, validateConfig, withDefaults } from "./config-helpers";
 import { createNextlyticsMiddleware } from "./middleware";
@@ -314,7 +315,7 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     return {
       sendEvent: async (
         eventName: string,
-        opts?: { props?: Record<string, unknown> }
+        opts?: { props?: Record<string, unknown>; user?: UserContext }
       ): Promise<{ ok: boolean }> => {
         // In the App Router no-arg path a missing pageRenderId means middleware
         // never ran — keep that as a hard error. With an explicit `req` the
@@ -332,7 +333,9 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
           collectedAt: new Date().toISOString(),
           anonymousUserId,
           serverContext,
-          userContext,
+          // An explicit per-event user (e.g. an email recipient resolved from a
+          // link) overrides the request-derived one from callbacks.getUser.
+          userContext: opts?.user ?? userContext,
           properties: { ...propsFromCallback, ...opts?.props },
         };
         // Await full delivery, not just dispatch kickoff. Unlike the middleware
