@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/jitsucom/nextlytics/compare/v0.5.0...v0.5.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* await delivery in analytics().sendEvent() ([#41](https://github.com/jitsucom/nextlytics/issues/41)) ([70030dd](https://github.com/jitsucom/nextlytics/commit/70030dd2bf2b36c99a5d3d830ebe4612e726c4f2))
+
 ## [0.5.0](https://github.com/jitsucom/nextlytics/compare/v0.4.2...v0.5.0) (2026-06-05)
 
 
