@@ -97,7 +97,8 @@ export interface NextlyticsEvent {
 }
 
 import type { RequestCookies } from "next/dist/server/web/spec-extension/cookies";
-import type { NextMiddleware } from "next/server";
+import type { NextMiddleware, NextRequest } from "next/server";
+import type { NextApiRequest } from "next";
 
 export type AnonymousUserResult = {
   /** Anonymous user identifier */
@@ -251,7 +252,7 @@ export type NextlyticsBackendFactory = (ctx: RequestContext) => NextlyticsBacken
 
 /** Server-side analytics API */
 export type NextlyticsServerSide = {
-  /** Send custom event from server component/action */
+  /** Send custom event from a server component, server action, or API route */
   sendEvent: (
     eventName: string,
     opts?: { props?: Record<string, unknown> }
@@ -299,8 +300,15 @@ export type ClientRequestResult = {
 
 /** Return value from Nextlytics() */
 export type NextlyticsResult = {
-  /** Get server-side analytics API */
-  analytics: () => Promise<NextlyticsServerSide>;
+  /** Get server-side analytics API.
+   *
+   * App Router (server components, server actions, route handlers): call with no
+   * argument — context is read from `next/headers`.
+   *
+   * Pages Router API routes: `next/headers` is unavailable there, so pass the
+   * request (`analytics(req)`). A NextRequest (App Router route handler) is also
+   * accepted. */
+  analytics: (req?: NextRequest | NextApiRequest) => Promise<NextlyticsServerSide>;
   /** Middleware to intercept requests */
   middleware: NextMiddleware;
   /** Manually dispatch event (returns two-phase result) */

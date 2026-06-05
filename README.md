@@ -100,6 +100,39 @@ export { middleware };
 
 That's it. Every page view is now tracked server-side.
 
+## Custom server events
+
+Use `analytics().sendEvent()` to emit your own events from the server.
+
+In the App Router (server components, server actions, route handlers) call it with no argument — the
+request context is read from `next/headers`:
+
+```typescript
+import { analytics } from "@/nextlytics";
+
+export async function signUp(formData: FormData) {
+  "use server";
+  // ...create the user...
+  await (await analytics()).sendEvent("signup", { props: { plan: "pro" } });
+}
+```
+
+In **Pages Router API routes** `next/headers` is unavailable, so pass the request object:
+
+```typescript
+import type { NextApiRequest, NextApiResponse } from "next";
+import { analytics } from "@/nextlytics";
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  await (await analytics(req)).sendEvent("email_opened", { props: { campaign: "welcome" } });
+  res.status(200).end();
+}
+```
+
+This also works for standalone routes with no preceding page render (e.g. email pixels or redirect
+endpoints) — the event is sent without a parent page-view. A NextRequest (App Router route handler)
+may be passed the same way.
+
 ## Pages Router
 
 Nextlytics also supports the Pages Router. The middleware works the same way, but instead of

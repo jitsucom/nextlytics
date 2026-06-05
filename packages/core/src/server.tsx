@@ -1,7 +1,14 @@
 import type { ReactNode } from "react";
+import type { NextRequest } from "next/server";
+import type { NextApiRequest } from "next";
+import type { RequestCookies } from "next/dist/server/web/spec-extension/cookies";
 import { headers, cookies } from "next/headers";
 import { removeSensitiveHeaders } from "./headers";
-import { headerNames, restoreServerComponentContext } from "./server-component-context";
+import {
+  headerNames,
+  restoreServerComponentContext,
+  LAST_PAGE_RENDER_ID_COOKIE,
+} from "./server-component-context";
 import { resolveAnonymousUser } from "./anonymous-user";
 import { NextlyticsClient } from "./client";
 import type {
@@ -268,16 +275,25 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
     );
   }
 
-  const analytics = async () => {
-    const headersList = await headers();
-    const cookieStore = await cookies();
-    const pageRenderId = headersList.get(headerNames.pageRenderId);
+  const analytics = async (req?: NextRequest | NextApiRequest) => {
+    // App Router (no `req`) reads context from `next/headers`. Pages Router API
+    // routes pass `req` (NextApiRequest) since `next/headers` throws there; App
+    // Router Route Handlers may pass `req` (NextRequest) too.
+    const source = req ? normalizeRequest(req) : await normalizeFromNextHeaders();
 
-    const serverContext = createServerContextFromHeaders(headersList);
+    // Link the event to the page render that triggered it, when there is one.
+    // Standalone routes (e.g. email pixels) have no page render — parentEventId
+    // is omitted in that case rather than failing.
+    const pageRenderId =
+      source.headers.get(headerNames.pageRenderId) ||
+      source.cookies.get(LAST_PAGE_RENDER_ID_COOKIE)?.value ||
+      undefined;
+
+    const serverContext = buildServerContext(source);
     const ctx: RequestContext = {
-      headers: headersList,
-      cookies: cookieStore,
-      path: headersList.get(headerNames.pathname) || "",
+      headers: source.headers,
+      cookies: source.cookies,
+      path: source.path,
     };
 
     // Resolve anonymous user ID
@@ -300,7 +316,10 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
         eventName: string,
         opts?: { props?: Record<string, unknown> }
       ): Promise<{ ok: boolean }> => {
-        if (!pageRenderId) {
+        // In the App Router no-arg path a missing pageRenderId means middleware
+        // never ran — keep that as a hard error. With an explicit `req` the
+        // caller built the context themselves, so a missing render id is fine.
+        if (!pageRenderId && !req) {
           console.error("[Nextlytics] analytics() requires nextlyticsMiddleware");
           return { ok: false };
         }
@@ -308,7 +327,7 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
         const event: NextlyticsEvent = {
           origin: "server",
           eventId: generateId(),
-          parentEventId: pageRenderId,
+          ...(pageRenderId ? { parentEventId: pageRenderId } : {}),
           type: eventName,
           collectedAt: new Date().toISOString(),
           anonymousUserId,
@@ -332,37 +351,95 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
   };
 }
 
-function createServerContextFromHeaders(
-  headersList: Awaited<ReturnType<typeof headers>>
-): ServerEventContext {
+/** Request data `analytics()` needs, normalized across its three sources:
+ * App Router (`next/headers`), App Router Route Handlers (NextRequest), and
+ * Pages Router API routes (NextApiRequest). */
+type NormalizedRequest = {
+  headers: Headers;
+  cookies: Pick<RequestCookies, "get" | "getAll" | "has">;
+  path: string;
+  search: Record<string, string[]>;
+  method: string;
+};
+
+function searchToRecord(params: URLSearchParams): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  params.forEach((value, key) => {
+    (out[key] ??= []).push(value);
+  });
+  return out;
+}
+
+/** NextRequest exposes a Web `Headers` (has `.get`); NextApiRequest exposes a
+ * plain `IncomingHttpHeaders` object (no `.get`). */
+function isNextApiRequest(req: NextRequest | NextApiRequest): req is NextApiRequest {
+  return typeof (req.headers as { get?: unknown })?.get !== "function";
+}
+
+async function normalizeFromNextHeaders(): Promise<NormalizedRequest> {
+  const [_cookies, _headers] = await Promise.all([cookies(), headers()]);
+  return {
+    headers: _headers,
+    cookies: _cookies,
+    path: _headers.get(headerNames.pathname) || "",
+    search: searchToRecord(new URLSearchParams(_headers.get(headerNames.search) || "")),
+    method: "GET",
+  };
+}
+
+function normalizeRequest(req: NextRequest | NextApiRequest): NormalizedRequest {
+  if (!isNextApiRequest(req)) {
+    return {
+      headers: req.headers,
+      cookies: req.cookies,
+      path: req.nextUrl.pathname,
+      search: searchToRecord(req.nextUrl.searchParams),
+      method: req.method,
+    };
+  }
+
+  // Pages Router API route (req/res).
+  const headersList = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value !== undefined) {
+      headersList.set(key, Array.isArray(value) ? value.join(", ") : value);
+    }
+  }
+
+  const cookieMap = req.cookies || {};
+  const cookieStore: Pick<RequestCookies, "get" | "getAll" | "has"> = {
+    get: (name: string) => {
+      const value = cookieMap[name];
+      return value === undefined ? undefined : { name, value };
+    },
+    getAll: () => Object.entries(cookieMap).map(([name, value]) => ({ name, value })),
+    has: (name: string) => name in cookieMap,
+  } as Pick<RequestCookies, "get" | "getAll" | "has">;
+
+  const url = new URL(req.url || "/", `http://${headersList.get("host") || "localhost"}`);
+  return {
+    headers: headersList,
+    cookies: cookieStore,
+    path: url.pathname,
+    search: searchToRecord(url.searchParams),
+    method: req.method || "GET",
+  };
+}
+
+function buildServerContext(source: NormalizedRequest): ServerEventContext {
   const rawHeaders: Record<string, string> = {};
-  headersList.forEach((value, key) => {
+  source.headers.forEach((value, key) => {
     rawHeaders[key] = value;
   });
-  const requestHeaders = removeSensitiveHeaders(rawHeaders);
-
-  const pathname = headersList.get(headerNames.pathname) || "";
-  const search = headersList.get(headerNames.search) || "";
-  const searchParams: Record<string, string[]> = {};
-
-  if (search) {
-    const params = new URLSearchParams(search);
-    params.forEach((value, key) => {
-      if (!searchParams[key]) {
-        searchParams[key] = [];
-      }
-      searchParams[key].push(value);
-    });
-  }
 
   return {
     collectedAt: new Date(),
-    host: headersList.get("host") || "",
-    method: "GET",
-    path: pathname,
-    search: searchParams,
-    ip: headersList.get("x-forwarded-for")?.split(",")[0]?.trim() || "",
-    requestHeaders,
+    host: source.headers.get("host") || "",
+    method: source.method,
+    path: source.path,
+    search: source.search,
+    ip: source.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "",
+    requestHeaders: removeSensitiveHeaders(rawHeaders),
     responseHeaders: {},
   };
 }
