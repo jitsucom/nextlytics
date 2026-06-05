@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/jitsucom/nextlytics/compare/v0.5.1...v0.6.0) (2026-06-05)
+
+
+### Features
+
+* per-event user override in analytics().sendEvent() ([#43](https://github.com/jitsucom/nextlytics/issues/43)) ([446c0ca](https://github.com/jitsucom/nextlytics/commit/446c0ca4215a119a30ef04bee13b4514e9cd1f4e))
+
 ## [0.5.1](https://github.com/jitsucom/nextlytics/compare/v0.5.0...v0.5.1) (2026-06-05)
 
 
