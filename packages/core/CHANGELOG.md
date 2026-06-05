@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/jitsucom/nextlytics/compare/v0.4.2...v0.5.0) (2026-06-05)
+
+
+### Features
+
+* support analytics().sendEvent() from pages router api routes ([#39](https://github.com/jitsucom/nextlytics/issues/39)) ([b70ec61](https://github.com/jitsucom/nextlytics/commit/b70ec610821307e4f9c75556915cb2fbc87c7757))
+
 ## [0.4.2](https://github.com/jitsucom/nextlytics/compare/v0.4.1...v0.4.2) (2026-06-04)
 
 
