@@ -335,7 +335,13 @@ export function Nextlytics(userConfig: NextlyticsConfig): NextlyticsResult {
           userContext,
           properties: { ...propsFromCallback, ...opts?.props },
         };
-        await dispatchEventInternal(event, ctx);
+        // Await full delivery, not just dispatch kickoff. Unlike the middleware
+        // page-view path (which defers `completion` with `after()`), an explicit
+        // sendEvent has no response to ride on — in a serverless function the
+        // process can freeze right after this returns, dropping in-flight backend
+        // writes. Awaiting `completion` makes `await sendEvent()` mean "delivered".
+        const { completion } = dispatchEventInternal(event, ctx);
+        await completion;
 
         return { ok: true };
       },
