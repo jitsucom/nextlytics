@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.0](https://github.com/jitsucom/nextlytics/compare/v0.6.0...v0.7.0) (2026-06-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** non-navigation requests are now tracked as pageViews by default. Use excludePaths to opt specific paths out.
+
+### Features
+
+* **core:** track non-navigation requests as pageViews ([45e097d](https://github.com/jitsucom/nextlytics/commit/45e097d5f7dd270abed8dd89b7790e4219fc2d55))
+
 ## [0.6.0](https://github.com/jitsucom/nextlytics/compare/v0.5.1...v0.6.0) (2026-06-05)
 
 
