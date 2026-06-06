@@ -66,6 +66,8 @@ export function createNextlyticsMiddleware(
         integrity: request.integrity,
         isPrefetch: reqInfo.isPrefetch,
         isRsc: reqInfo.isRsc,
+        isDocumentRequest: reqInfo.isDocumentRequest,
+        isBrowserSubrequest: reqInfo.isBrowserSubrequest,
         isPageNavigation: reqInfo.isPageNavigation,
         isStaticFile: reqInfo.isStaticFile,
         isNextjsInternal: reqInfo.isNextjsInternal,
@@ -88,9 +90,30 @@ export function createNextlyticsMiddleware(
       return response;
     }
 
-    // Skip non-page-navigation, non-API requests (e.g. RSC fetches).
-    // Soft navigations are tracked via the client /api/event request.
-    if (!reqInfo.isPageNavigation && !config.isApiPath(pathname)) {
+    // Skip browser-initiated sub-requests (RSC soft-navigations, XHR, fetch(),
+    // subresources): the browser sets Sec-Fetch-Dest to something other than
+    // "document" for these. A single soft navigation fires RSC fetches that
+    // carry no reliable RSC header in Next 15.5+, so we can't single them out by
+    // an "rsc" marker — but they DO carry Sec-Fetch-Dest, and they're tracked
+    // client-side via /api/event, so counting them here would duplicate the
+    // pageView. Everything else is tracked: hard document navigations, and
+    // requests from non-browser clients (agents, curl, bots, server-to-server)
+    // which omit Sec-Fetch-* — that's how route handlers serving .md/.txt/JSON
+    // get counted. API paths are exempt so they still reach the apiCall handling
+    // below (subject to excludeApiCalls).
+    if (reqInfo.isBrowserSubrequest && !config.isApiPath(pathname)) {
+      const response = NextResponse.next();
+      response.headers.set(headerNames.active, "1");
+      return response;
+    }
+
+    // On non-API routes, only reads (GET/HEAD) and document navigations are
+    // pageViews. A non-read, non-navigation request to a non-API route — e.g. a
+    // webhook or programmatic POST/PUT to a Route Handler — is not a page view,
+    // so skip it. (A classic server-rendered form POST is a document navigation,
+    // so it's kept.) API paths flow through for any method → apiCall.
+    const isReadMethod = request.method === "GET" || request.method === "HEAD";
+    if (!isReadMethod && !reqInfo.isDocumentRequest && !config.isApiPath(pathname)) {
       const response = NextResponse.next();
       response.headers.set(headerNames.active, "1");
       return response;

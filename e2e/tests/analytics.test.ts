@@ -116,6 +116,62 @@ describe.each(versions)("%s", (version) => {
       await page.close();
     });
 
+    it("tracks a direct non-navigation route-handler GET as a pageView", async () => {
+      // A machine-style fetch (Accept: text/plain, no navigation headers) to a
+      // non-API route handler — the kind agents/curl make for .md / .txt
+      // content. The middleware must record exactly one pageView at the request
+      // path, not skip it for not being a browser page navigation.
+      const res = await fetch(`${testApp.baseUrl}/raw-data`, {
+        headers: { accept: "text/plain" },
+      });
+      expect(res.status).toBe(200);
+
+      const events = await testApp.waitForEvents((evs) =>
+        evs.some((e) => e.type === "pageView" && e.path === "/raw-data")
+      );
+      const matches = events.filter((e) => e.type === "pageView" && e.path === "/raw-data");
+      expect(matches.length).toBe(1);
+    });
+
+    it("does not track browser sub-requests like RSC soft-navigations", async () => {
+      // A browser-initiated sub-request (RSC soft navigation / XHR / fetch())
+      // carries Sec-Fetch-Dest set to something other than "document". In Next
+      // 15.5+ the soft-nav RSC fetch carries no reliable "rsc" header, so
+      // Sec-Fetch-Dest is what identifies it. Such requests are tracked
+      // client-side via /api/event; the middleware must skip them to avoid a
+      // duplicate pageView. (node fetch can set Sec-Fetch-* — a browser can't —
+      // so this reproduces the real soft-nav request the middleware sees.)
+      const res = await fetch(`${testApp.baseUrl}${testApp.testPagePath}`, {
+        headers: {
+          rsc: "1",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+        },
+      });
+      expect(res.status).toBeLessThan(500);
+
+      await new Promise((r) => setTimeout(r, 500));
+      const events = await testApp.getAnalyticsEvents();
+      const matches = events.filter(
+        (e) => e.type === "pageView" && e.path === testApp.testPagePath
+      );
+      expect(matches.length).toBe(0);
+    });
+
+    it("does not track non-GET requests to non-API routes (e.g. webhook POST)", async () => {
+      // A POST/PUT/etc. to a non-API route (a webhook or programmatic write to a
+      // Route Handler) is not a page view. The middleware runs regardless of
+      // whether the handler accepts POST, so this asserts the request is skipped
+      // even though /raw-data only implements GET.
+      await fetch(`${testApp.baseUrl}/raw-data`, { method: "POST" });
+
+      await new Promise((r) => setTimeout(r, 500));
+      const events = await testApp.getAnalyticsEvents();
+      const matches = events.filter((e) => e.type === "pageView" && e.path === "/raw-data");
+      expect(matches.length).toBe(0);
+    });
+
     it("captures server context (host, method, user-agent)", async () => {
       const page = await testApp.newPage();
 

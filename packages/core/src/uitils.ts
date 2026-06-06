@@ -74,6 +74,17 @@ export type RequestInfo = {
   isPrefetch: boolean;
   /** True if this is an RSC (React Server Components) navigation */
   isRsc: boolean;
+  /** True if this is a hard document navigation (sec-fetch-dest=document or
+   * sec-fetch-mode=navigate) — the strong signal, distinct from the weaker
+   * accepts-HTML heuristic folded into isPageNavigation. */
+  isDocumentRequest: boolean;
+  /** True if this is a browser-initiated sub-request (RSC soft-navigation, XHR,
+   * fetch(), or a subresource) — Sec-Fetch-Dest is present and is not
+   * "document". Modern browsers always send Sec-Fetch-Dest (it's a forbidden
+   * header, so it can't be spoofed); non-browser clients (curl, agents, bots,
+   * server-to-server) omit it. Used to skip soft-navigation RSC fetches, which
+   * carry no reliable RSC header in Next 15.5+ yet must not be double-counted. */
+  isBrowserSubrequest: boolean;
   /** True if this is a standard document or RSC navigation */
   isPageNavigation: boolean;
   /** True if this is a static file (ico, png, css, js, etc.) */
@@ -126,6 +137,10 @@ export function getRequestInfo(request: NextRequest): RequestInfo {
   const accept = headers.get("accept") || "";
 
   const isDocumentRequest = secFetchDest === "document" || secFetchMode === "navigate";
+  // A browser set Sec-Fetch-Dest but this isn't a document navigation → it's an
+  // RSC soft-nav / XHR / fetch() / subresource. Non-browser clients omit
+  // Sec-Fetch-* entirely, so they are NOT sub-requests and remain trackable.
+  const isBrowserSubrequest = secFetchDest !== null && !isDocumentRequest;
   const acceptsHtml = accept.includes("text/html");
 
   // Page navigation = document request OR accepts HTML.
@@ -141,6 +156,8 @@ export function getRequestInfo(request: NextRequest): RequestInfo {
   return {
     isPrefetch,
     isRsc,
+    isDocumentRequest,
+    isBrowserSubrequest,
     isPageNavigation,
     isStaticFile,
     isNextjsInternal,
