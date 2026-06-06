@@ -4,7 +4,8 @@
       "release-type": "node",
       "package-name": "@nextlytics/core",
       "changelog-path": "CHANGELOG.md",
-      "include-component-in-tag": false
+      "include-component-in-tag": false,
+      "bump-minor-pre-major": true
     }
   },
   "separate-pull-requests": true,
