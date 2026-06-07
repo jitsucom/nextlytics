@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/jitsucom/nextlytics/compare/v0.7.1...v0.8.0) (2026-06-07)
+
+
+### Features
+
+* **core:** add `capture` config to decide what gets recorded ([ee5684e](https://github.com/jitsucom/nextlytics/commit/ee5684e4b700c6c971fe80735aa17b883f494ec2))
+
 ## [0.7.1](https://github.com/jitsucom/nextlytics/compare/v0.7.0...v0.7.1) (2026-06-07)
 
 
