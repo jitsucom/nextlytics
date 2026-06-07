@@ -14,6 +14,7 @@ import type {
 } from "./types";
 import type { NextlyticsConfigWithDefaults } from "./config-helpers";
 import { generateId, getRequestInfo, createServerContext, getNextVersion } from "./uitils";
+import { resolveCaptureType } from "./capture";
 import { resolveAnonymousUser } from "./anonymous-user";
 import {
   handleEventPost,
@@ -90,6 +91,53 @@ export function createNextlyticsMiddleware(
       return response;
     }
 
+    // capture-based config: the single source of truth for what gets recorded.
+    // When set, the deprecated isApiPath/excludeApiCalls/excludePaths are ignored.
+    if (config.capture) {
+      const eventType = resolveCaptureType(config.capture, reqInfo, {
+        path: pathname,
+        method: request.method,
+        userAgent: request.headers.get("user-agent") ?? undefined,
+      });
+      if (eventType === null) {
+        const response = NextResponse.next();
+        response.headers.set(headerNames.active, "1");
+        return response;
+      }
+
+      const pageRenderId = generateId();
+      const serverContext = createServerContext(request);
+      const response = NextResponse.next();
+      const ctx = createRequestContext(request);
+      response.cookies.set(LAST_PAGE_RENDER_ID_COOKIE, pageRenderId, { path: "/" });
+      const { anonId } = await resolveAnonymousUser({ ctx, serverContext, config, response });
+      const userContext = await getUserContext(config, ctx);
+      const extraProps = await getEventProps(config, ctx, userContext);
+      const event = createEvent(
+        pageRenderId,
+        serverContext,
+        eventType,
+        userContext,
+        anonId,
+        extraProps
+      );
+      const { clientActions, completion } = dispatchEvent(event, ctx, "on-request");
+      const actions = await clientActions;
+      const scripts = actions.items.filter(
+        (i): i is TemplatizedScriptInsertion<unknown> => i.type === "script-template"
+      );
+      after(() => completion);
+      serializeServerComponentContext(response, {
+        pageRenderId,
+        pathname: request.nextUrl.pathname,
+        search: request.nextUrl.search,
+        scripts,
+      });
+      return response;
+    }
+
+    // ----- Deprecated path (no `capture`): isApiPath / excludeApiCalls / excludePaths -----
+
     // Skip browser-initiated sub-requests (RSC soft-navigations, XHR, fetch(),
     // subresources): the browser sets Sec-Fetch-Dest to something other than
     // "document" for these. A single soft navigation fires RSC fetches that
@@ -152,10 +200,10 @@ export function createNextlyticsMiddleware(
 
     const userContext = await getUserContext(config, ctx);
     const extraProps = await getEventProps(config, ctx, userContext);
-    const pageViewEvent = createPageViewEvent(
+    const pageViewEvent = createEvent(
       pageRenderId,
       serverContext,
-      isApiPath,
+      isApiPath ? "apiCall" : "pageView",
       userContext,
       anonId,
       extraProps
@@ -185,15 +233,14 @@ export function createNextlyticsMiddleware(
   };
 }
 
-function createPageViewEvent(
+function createEvent(
   pageRenderId: string,
   serverContext: ServerEventContext,
-  isApiPath: boolean,
+  eventType: string,
   userContext?: UserContext,
   anonymousUserId?: string,
   extraProps?: Record<string, unknown>
 ): NextlyticsEvent {
-  const eventType = isApiPath ? "apiCall" : "pageView";
   return {
     origin: "server",
     collectedAt: serverContext.collectedAt.toISOString(),

@@ -142,9 +142,40 @@ export type BackendWithConfig = {
 /** Backend config entry - either a backend directly or with config */
 export type BackendConfigEntry = NextlyticsBackend | NextlyticsBackendFactory | BackendWithConfig;
 
+/** The request `capture` decides on. Only real browser navigations and direct
+ * (non-browser) requests reach `capture`; RSC/XHR sub-requests, prefetches,
+ * static assets, and non-GET non-navigation writes are skipped before it. */
+export type CaptureRequest = {
+  /** URL pathname, e.g. "/docs/quick-start.md" */
+  path: string;
+  /** HTTP method (GET, POST, …) */
+  method: string;
+  /** True when a real browser navigated here (Sec-Fetch-Dest: document). False
+   * for programmatic clients — agents, crawlers, curl, server-to-server — which
+   * omit Sec-Fetch-* headers. */
+  fromBrowser: boolean;
+  /** User-Agent header, if present. */
+  userAgent?: string;
+};
+
 export type NextlyticsConfig = {
   /** Enable debug logging (shows backend stats for each event) */
   debug?: boolean;
+  /**
+   * Decide whether — and as what event type — to record a request.
+   *
+   *  - `false`    → don't record
+   *  - `true`     → record as the default type ("pageView")
+   *  - `"<type>"` → record with this string as `event.type` (e.g. "apiCall")
+   *
+   * Real browser users are the common case; programmatic clients (agents,
+   * crawlers, curl) are identified by `fromBrowser: false`. Defaults to
+   * `({ fromBrowser }) => fromBrowser` — i.e. track browser navigations only.
+   *
+   * When set, this is the single source of truth and the deprecated
+   * `isApiPath` / `excludeApiCalls` / `excludePaths` options are ignored.
+   */
+  capture?: (req: CaptureRequest) => boolean | string;
   anonymousUsers?: {
     /** Store anonymous ID in cookies */
     useCookies?: boolean;
@@ -157,11 +188,11 @@ export type NextlyticsConfig = {
     /** Cookie max age in seconds (default: 2 years) */
     cookieMaxAge?: number;
   };
-  /** Skip tracking for API routes */
+  /** @deprecated Use `capture` instead — return `false` for API paths. Skip tracking for API routes. */
   excludeApiCalls?: boolean;
-  /** Skip tracking for specific paths */
+  /** @deprecated Use `capture` instead — return `false` for the paths you want to skip. */
   excludePaths?: (path: string) => boolean;
-  /** Determine if path is API route. Default: () => false */
+  /** @deprecated Use `capture` instead — return `"apiCall"` (or `false`) for API paths. */
   isApiPath?: (path: string) => boolean;
   /** Endpoint for client events. Default: "/api/event" */
   eventEndpoint?: string;
