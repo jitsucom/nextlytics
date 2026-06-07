@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/jitsucom/nextlytics/compare/v0.7.0...v0.7.1) (2026-06-07)
+
+
+### Bug Fixes
+
+* **core:** count only GET (not HEAD) as a pageView on non-API routes ([7afa8c2](https://github.com/jitsucom/nextlytics/commit/7afa8c2ef330073777a12a371b069de199f5cd6f))
+
 ## [0.7.0](https://github.com/jitsucom/nextlytics/compare/v0.6.0...v0.7.0) (2026-06-06)
 
 
