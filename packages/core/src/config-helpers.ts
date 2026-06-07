@@ -29,9 +29,24 @@ export interface ConfigValidationResult {
   warnings: string[];
 }
 
-export function validateConfig(_config: NextlyticsConfig): ConfigValidationResult {
-  // Currently no validations - can add backend-specific checks here
-  return { valid: true, warnings: [] };
+export function validateConfig(config: NextlyticsConfig): ConfigValidationResult {
+  const warnings: string[] = [];
+
+  const deprecated = (["isApiPath", "excludeApiCalls", "excludePaths"] as const).filter(
+    (k) => config[k] !== undefined
+  );
+
+  if (config.capture && deprecated.length > 0) {
+    warnings.push(
+      `[Nextlytics] \`capture\` is set, so the deprecated option(s) ${deprecated.join(", ")} are ignored. Move that logic into \`capture\`.`
+    );
+  } else if (deprecated.length > 0) {
+    warnings.push(
+      `[Nextlytics] ${deprecated.join(", ")} are deprecated; prefer \`capture\` (return false / true / "<eventType>").`
+    );
+  }
+
+  return { valid: true, warnings };
 }
 
 export function logConfigWarnings(result: ConfigValidationResult): void {

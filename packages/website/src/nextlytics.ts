@@ -94,11 +94,11 @@ export const { middleware, analytics, NextlyticsServer } = Nextlytics({
   anonymousUsers: {},
   debug: true,
   backends: buildBackends(),
-  isApiPath: (path) => path.startsWith("/api/"),
-  excludeApiCalls: true,
-  // The middleware now tracks every non-API, non-RSC request as a pageView
-  // (not just browser navigations). Keep the demo's own data clean by dropping
-  // machine/asset paths that aren't real pages.
-  excludePaths: (path) =>
-    path === "/robots.txt" || path === "/sitemap.xml" || path.startsWith("/.well-known/"),
+  // Record browser navigations and direct (non-browser) GETs as pageViews,
+  // except API routes and machine/asset paths that aren't real pages.
+  capture: ({ path }) =>
+    !path.startsWith("/api/") &&
+    path !== "/robots.txt" &&
+    path !== "/sitemap.xml" &&
+    !path.startsWith("/.well-known/"),
 });
