@@ -159,12 +159,13 @@ describe.each(versions)("%s", (version) => {
       expect(matches.length).toBe(0);
     });
 
-    it("does not track non-GET requests to non-API routes (e.g. webhook POST)", async () => {
-      // A POST/PUT/etc. to a non-API route (a webhook or programmatic write to a
-      // Route Handler) is not a page view. The middleware runs regardless of
-      // whether the handler accepts POST, so this asserts the request is skipped
-      // even though /raw-data only implements GET.
+    it("does not track non-GET requests to non-API routes (POST, HEAD)", async () => {
+      // Only GET (and document navigations) are page views on non-API routes. A
+      // POST/PUT/etc. is a write; a HEAD is a metadata probe — neither is a view.
+      // The middleware runs regardless of whether the handler implements these
+      // methods (/raw-data only implements GET).
       await fetch(`${testApp.baseUrl}/raw-data`, { method: "POST" });
+      await fetch(`${testApp.baseUrl}/raw-data`, { method: "HEAD" });
 
       await new Promise((r) => setTimeout(r, 500));
       const events = await testApp.getAnalyticsEvents();

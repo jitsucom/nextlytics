@@ -107,13 +107,12 @@ export function createNextlyticsMiddleware(
       return response;
     }
 
-    // On non-API routes, only reads (GET/HEAD) and document navigations are
-    // pageViews. A non-read, non-navigation request to a non-API route — e.g. a
-    // webhook or programmatic POST/PUT to a Route Handler — is not a page view,
-    // so skip it. (A classic server-rendered form POST is a document navigation,
-    // so it's kept.) API paths flow through for any method → apiCall.
-    const isReadMethod = request.method === "GET" || request.method === "HEAD";
-    if (!isReadMethod && !reqInfo.isDocumentRequest && !config.isApiPath(pathname)) {
+    // On non-API routes, only GET and document navigations are pageViews. A HEAD
+    // is a metadata probe (monitors, link checkers, cache revalidation) — nothing
+    // is viewed — and POST/PUT/etc. are writes; none are page views, so skip them.
+    // (A classic server-rendered form POST is a document navigation, so it's
+    // kept.) API paths flow through for any method → apiCall.
+    if (request.method !== "GET" && !reqInfo.isDocumentRequest && !config.isApiPath(pathname)) {
       const response = NextResponse.next();
       response.headers.set(headerNames.active, "1");
       return response;
