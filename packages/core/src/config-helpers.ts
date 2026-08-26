@@ -5,6 +5,7 @@ export type NextlyticsConfigWithDefaults = Required<
 > &
   NextlyticsConfig & {
     anonymousUsers: Required<NonNullable<NextlyticsConfig["anonymousUsers"]>>;
+    callbacks: NonNullable<NextlyticsConfig["callbacks"]>;
   };
 
 export function withDefaults(config: NextlyticsConfig): NextlyticsConfigWithDefaults {
@@ -14,6 +15,7 @@ export function withDefaults(config: NextlyticsConfig): NextlyticsConfigWithDefa
     eventEndpoint: config.eventEndpoint ?? "/api/event",
     isApiPath: config.isApiPath ?? ((str: string) => str.startsWith("/api")),
     backends: config.backends ?? [],
+    callbacks: config.callbacks ?? {},
     anonymousUsers: {
       gdprMode: config.anonymousUsers?.gdprMode ?? true,
       useCookies: config.anonymousUsers?.useCookies ?? false,
